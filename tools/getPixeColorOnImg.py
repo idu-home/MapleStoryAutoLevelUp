@@ -1,8 +1,10 @@
 import cv2
 import argparse
 import os
+import sys
 
 # local import
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.utils.common import to_standard_hsv
 
 def main():
