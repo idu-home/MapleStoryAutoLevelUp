@@ -8,6 +8,11 @@ import sys
 import os
 import shutil
 
+# Add project root to Python path
+current_dir = os.path.dirname(os.path.abspath(__file__))
+project_root = os.path.dirname(current_dir)
+sys.path.insert(0, project_root)
+
 # CV import
 import numpy as np
 import cv2
