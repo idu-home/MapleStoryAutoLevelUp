@@ -25,6 +25,9 @@ class NearRuneState(State):
         elif time.time() - self.bot.fsm.t_last_transition > \
             self.bot.cfg["rune_find"]["near_rune_duration"]:
             # Check if statue timeout
+            # Stop rune detection alert on timeout
+            if self.bot.cfg.get("alert", {}).get("enable", False):
+                self.bot.alert.stop_rune_alert()
             return "finding_rune"
 
         else:

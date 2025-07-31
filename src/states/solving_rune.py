@@ -15,6 +15,11 @@ class SolvingRuneState(State):
         if not self.bot.rune_solver.is_in_rune_game(
             self.bot.img_frame, self.bot.img_frame_debug):
             # Not in arrow minigame anymore
+            # Stop rune detection alert and play rune solved alert
+            if self.bot.cfg.get("alert", {}).get("enable", False):
+                            self.bot.alert.stop_rune_alert()
+            if self.bot.cfg.get("alert", {}).get("rune_solved_alert", False):
+                self.bot.alert.play_rune_solved_alert()
             return "hunting"
         else:
             return None

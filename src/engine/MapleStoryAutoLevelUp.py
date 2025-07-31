@@ -38,6 +38,7 @@ from src.engine.HealthMonitor import HealthMonitor
 from src.engine.Profiler import Profiler
 from src.engine.RuneSolver import RuneSolver
 from src.engine.FiniteStateMachine import FiniteStateMachine
+from src.engine.Alert import Alert
 from src.states.hunting import HuntingState
 from src.states.finding_rune import FindingRuneState
 from src.states.near_rune import NearRuneState
@@ -120,6 +121,7 @@ class MapleStoryAutoBot:
         self.health_monitor = None # Health monitor
         self.profiler = None # Profiler, for performance issue debugging
         self.rune_solver = None # Rune solver
+        self.alert = None # Alert manager for sound alerts
 
         # Finite State Machine
         self.fsm = FiniteStateMachine()
@@ -138,13 +140,14 @@ class MapleStoryAutoBot:
         self.fsm.add_transition("solving_rune", "hunting") # After rune solving
         self.fsm.set_init_state("hunting")
 
-    def update_signals(self, image_debug_signal, route_map_viz_signal):
+    def update_signals(self, image_debug_signal, route_map_viz_signal, alert_status_signal=None):
         '''
         Update signal from UI framework.
         For debug window viz
         '''
         self.image_debug_signal = image_debug_signal
         self.route_map_viz_signal = route_map_viz_signal
+        self.alert_status_signal = alert_status_signal
 
     def load_config(self, cfg):
         '''
@@ -272,6 +275,9 @@ class MapleStoryAutoBot:
 
         # Init rune solver
         self.rune_solver = RuneSolver(self.cfg)
+
+        # Init alert manager
+        self.alert = Alert(self.cfg)
 
         # Init web debug server
         self.web_server = None
@@ -1303,6 +1309,9 @@ class MapleStoryAutoBot:
         # Terminate web server
         if self.web_server is not None:
             self.web_server.stop()
+        # Terminate alert manager
+        if self.alert is not None:
+            self.alert.cleanup()
         self.is_terminated = True
         logger.info(f"[terminate_threads] Terminated all threads")
 
@@ -1799,11 +1808,17 @@ class MapleStoryAutoBot:
                     self.image_debug_signal.emit(img_frame_debug_emit)
                     self.route_map_viz_signal.emit(img_route_debug_emit)
                 
+                # Update alert status
+                if self.is_ui and self.alert_status_signal is not None:
+                    is_alert_active = self.alert.is_rune_alert_playing()
+                    self.alert_status_signal.emit(is_alert_active)
+                
                 # Update web debug server
                 if self.web_server is not None and self.is_show_debug_window:
                     debug_frame = self.img_frame_debug[:self.cfg["ui_coords"]["ui_y_start"], :] if self.img_frame_debug is not None else None
                     route_frame = self.img_route_debug if self.img_route_debug is not None else None
-                    self.web_server.update_debug_frame(debug_frame, route_frame)
+                    alert_status = self.alert.is_rune_alert_playing()
+                    self.web_server.update_debug_frame(debug_frame, route_frame, alert_status)
             else:
                 pass
                 # logger.warning("Skipped debug window update due to invalid frame.")
