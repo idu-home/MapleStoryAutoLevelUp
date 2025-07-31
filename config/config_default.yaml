@@ -327,6 +327,13 @@ system:
   server: "TW"                      # ⚙️ Options: "TW" "NA"
   language: "cn"                    # ⚙️ Options: "eng" "cn"
 
+web_debug:
+  # 🌐 Web Debug Server
+  # Enable web-based debug viewer for remote monitoring
+  enable: False                     # ✅ Enable web debug server
+  host: "0.0.0.0"                  # 🌐 Server host (0.0.0.0 for all interfaces)
+  port: 5000                       # 🌐 Server port
+
 profiler:
   # ⚙️ Profiler
   # For FPS/performance debugging

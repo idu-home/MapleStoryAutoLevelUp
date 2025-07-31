@@ -27,6 +27,7 @@ from src.utils.common import (find_pattern_sqdiff, draw_rectangle, screenshot, n
     click_in_game_window, mask_route_colors, to_opencv_hsv, debug_minimap_colors,
     activate_game_window, is_img_16_to_9, normalize_pixel_coordinate, resize_game_window
 )
+from src.web import WebDebugServer
 from src.input.KeyBoardController import KeyBoardController, press_key
 from src.input.KeyBoardListener import KeyBoardListener
 if is_mac():
@@ -271,6 +272,15 @@ class MapleStoryAutoBot:
 
         # Init rune solver
         self.rune_solver = RuneSolver(self.cfg)
+
+        # Init web debug server
+        self.web_server = None
+        if self.cfg.get("web_debug", {}).get("enable", False):
+            host = self.cfg["web_debug"].get("host", "0.0.0.0")
+            port = self.cfg["web_debug"].get("port", 5000)
+            self.web_server = WebDebugServer(host=host, port=port)
+            self.web_server.start()
+            logger.info(f"Web debug server started at {self.web_server.get_url()}")
 
         # Reset all timers
         self.t_last_frame = time.time()
@@ -1290,6 +1300,9 @@ class MapleStoryAutoBot:
         # Terminate health monitor
         if self.health_monitor is not None:
             self.health_monitor.stop()
+        # Terminate web server
+        if self.web_server is not None:
+            self.web_server.stop()
         self.is_terminated = True
         logger.info(f"[terminate_threads] Terminated all threads")
 
@@ -1785,6 +1798,12 @@ class MapleStoryAutoBot:
                     img_route_debug_emit = self.img_route_debug.copy()
                     self.image_debug_signal.emit(img_frame_debug_emit)
                     self.route_map_viz_signal.emit(img_route_debug_emit)
+                
+                # Update web debug server
+                if self.web_server is not None and self.is_show_debug_window:
+                    debug_frame = self.img_frame_debug[:self.cfg["ui_coords"]["ui_y_start"], :] if self.img_frame_debug is not None else None
+                    route_frame = self.img_route_debug if self.img_route_debug is not None else None
+                    self.web_server.update_debug_frame(debug_frame, route_frame)
             else:
                 pass
                 # logger.warning("Skipped debug window update due to invalid frame.")

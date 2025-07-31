@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapleStory Auto Bot Debug Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #1a1a1a;
+            color: #ffffff;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #2a2a2a;
+            border-radius: 8px;
+        }
+        
+        .header h1 {
+            margin: 0;
+            color: #4CAF50;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #ff4444;
+            animation: pulse 2s infinite;
+        }
+        
+        .status-dot.connected {
+            background-color: #4CAF50;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .image-container {
+            display: flex;
+            gap: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .image-panel {
+            background-color: #2a2a2a;
+            border-radius: 8px;
+            padding: 15px;
+            min-width: 400px;
+            flex: 1;
+        }
+        
+        .image-panel h3 {
+            margin: 0 0 15px 0;
+            color: #4CAF50;
+            text-align: center;
+        }
+        
+        .image-wrapper {
+            position: relative;
+            text-align: center;
+        }
+        
+        .debug-image, .route-image {
+            max-width: 100%;
+            height: auto;
+            border-radius: 4px;
+            border: 2px solid #444;
+        }
+        
+        .no-image {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            height: 300px;
+            background-color: #333;
+            border-radius: 4px;
+            color: #888;
+            font-style: italic;
+        }
+        
+        .image-info {
+            margin-top: 10px;
+            font-size: 12px;
+            color: #888;
+            text-align: center;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            margin: 0 5px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        
+        .btn:hover {
+            background-color: #45a049;
+        }
+        
+        .btn:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+        
+        .fps-counter {
+            font-size: 14px;
+            color: #888;
+        }
+        
+        @media (max-width: 768px) {
+            .image-container {
+                flex-direction: column;
+            }
+            
+            .image-panel {
+                min-width: auto;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🎮 MapleStory Auto Bot Debug Viewer</h1>
+    </div>
+    
+    <div class="status-bar">
+        <div class="status-indicator">
+            <div id="connection-dot" class="status-dot"></div>
+            <span id="connection-status">连接中...</span>
+        </div>
+        <div class="fps-counter">
+            <span id="fps-text">FPS: --</span>
+        </div>
+        <div class="controls">
+            <button id="refresh-btn" class="btn" onclick="location.reload()">刷新页面</button>
+        </div>
+    </div>
+    
+    <div class="image-container">
+        <div class="image-panel">
+            <h3>🎯 游戏窗口调试视图</h3>
+            <div class="image-wrapper">
+                <div id="debug-placeholder" class="no-image">
+                    等待调试图像...
+                </div>
+                <img id="debug-image" class="debug-image" style="display: none;" alt="Debug Frame">
+            </div>
+            <div class="image-info" id="debug-info">
+                状态: 未连接
+            </div>
+        </div>
+        
+        <div class="image-panel">
+            <h3>🗺️ 路线地图视图</h3>
+            <div class="image-wrapper">
+                <div id="route-placeholder" class="no-image">
+                    等待路线图像...
+                </div>
+                <img id="route-image" class="route-image" style="display: none;" alt="Route Frame">
+            </div>
+            <div class="image-info" id="route-info">
+                状态: 未连接
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 连接WebSocket
+        const socket = io();
+        
+        // DOM元素
+        const connectionDot = document.getElementById('connection-dot');
+        const connectionStatus = document.getElementById('connection-status');
+        const debugImage = document.getElementById('debug-image');
+        const debugPlaceholder = document.getElementById('debug-placeholder');
+        const debugInfo = document.getElementById('debug-info');
+        const routeImage = document.getElementById('route-image');
+        const routePlaceholder = document.getElementById('route-placeholder');
+        const routeInfo = document.getElementById('route-info');
+        const fpsText = document.getElementById('fps-text');
+        
+        // FPS计算
+        let frameCount = 0;
+        let lastFpsTime = Date.now();
+        let fps = 0;
+        
+        // 连接状态处理
+        socket.on('connect', function() {
+            connectionDot.classList.add('connected');
+            connectionStatus.textContent = '已连接';
+            debugInfo.textContent = '状态: 已连接，等待图像...';
+            routeInfo.textContent = '状态: 已连接，等待图像...';
+        });
+        
+        socket.on('disconnect', function() {
+            connectionDot.classList.remove('connected');
+            connectionStatus.textContent = '连接断开';
+            debugInfo.textContent = '状态: 连接断开';
+            routeInfo.textContent = '状态: 连接断开';
+        });
+        
+        // 状态消息
+        socket.on('status', function(data) {
+            console.log('Status:', data.message);
+        });
+        
+        // 调试图像更新
+        socket.on('debug_frame_update', function(data) {
+            if (data.debug_frame) {
+                debugImage.src = data.debug_frame;
+                debugImage.style.display = 'block';
+                debugPlaceholder.style.display = 'none';
+                debugInfo.textContent = `状态: 已更新 (${new Date().toLocaleTimeString()})`;
+                
+                // 更新FPS
+                frameCount++;
+                const now = Date.now();
+                if (now - lastFpsTime >= 1000) {
+                    fps = frameCount;
+                    frameCount = 0;
+                    lastFpsTime = now;
+                }
+                fpsText.textContent = `FPS: ${fps}`;
+            }
+        });
+        
+        // 路线图像更新
+        socket.on('route_frame_update', function(data) {
+            if (data.route_frame) {
+                routeImage.src = data.route_frame;
+                routeImage.style.display = 'block';
+                routePlaceholder.style.display = 'none';
+                routeInfo.textContent = `状态: 已更新 (${new Date().toLocaleTimeString()})`;
+            }
+        });
+        
+        // 错误处理
+        socket.on('connect_error', function(error) {
+            console.error('Connection error:', error);
+            connectionStatus.textContent = '连接错误';
+            connectionDot.classList.remove('connected');
+        });
+        
+        // 图像加载错误处理
+        debugImage.onerror = function() {
+            debugInfo.textContent = '状态: 图像加载失败';
+        };
+        
+        routeImage.onerror = function() {
+            routeInfo.textContent = '状态: 图像加载失败';
+        };
+        
+        // 页面卸载时断开连接
+        window.onbeforeunload = function() {
+            socket.disconnect();
+        };
+    </script>
+</body>
+</html> 
