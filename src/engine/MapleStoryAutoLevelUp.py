@@ -1819,6 +1819,10 @@ class MapleStoryAutoBot:
                     route_frame = self.img_route_debug if self.img_route_debug is not None else None
                     alert_status = self.alert.is_rune_alert_playing()
                     self.web_server.update_debug_frame(debug_frame, route_frame, alert_status)
+                
+                # Update web debug server config if in UI mode
+                if self.is_ui:
+                    self.update_web_debug_config()
             else:
                 pass
                 # logger.warning("Skipped debug window update due to invalid frame.")
@@ -1830,6 +1834,37 @@ class MapleStoryAutoBot:
             target_duration = 1.0 / self.cfg["system"]["fps_limit_main"]
             if frame_duration < target_duration:
                 time.sleep(target_duration - frame_duration)
+
+    def update_web_debug_config(self):
+        """Update web debug server based on current config"""
+        web_cfg = self.cfg.get("web_debug", {})
+        enable = web_cfg.get("enable", False)
+        
+        # If web server should be enabled but not running
+        if enable and self.web_server is None:
+            host = web_cfg.get("host", "0.0.0.0")
+            port = web_cfg.get("port", 5000)
+            self.web_server = WebDebugServer(host=host, port=port)
+            self.web_server.start()
+            logger.info(f"Web debug server started at {self.web_server.get_url()}")
+        
+        # If web server should be disabled but running
+        elif not enable and self.web_server is not None:
+            self.web_server.stop()
+            self.web_server = None
+            logger.info("Web debug server stopped")
+        
+        # If web server is running but config changed
+        elif enable and self.web_server is not None:
+            current_host = web_cfg.get("host", "0.0.0.0")
+            current_port = web_cfg.get("port", 5000)
+            if (self.web_server.host != current_host or 
+                self.web_server.port != current_port):
+                # Restart with new config
+                self.web_server.stop()
+                self.web_server = WebDebugServer(host=current_host, port=current_port)
+                self.web_server.start()
+                logger.info(f"Web debug server restarted at {self.web_server.get_url()}")
 
 def main(args):
     '''
