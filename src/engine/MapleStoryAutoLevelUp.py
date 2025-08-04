@@ -253,6 +253,9 @@ class MapleStoryAutoBot:
         '''
         Start all threads
         '''
+        # Reset termination flag
+        self.is_terminated = False
+        
         # Start keyboard controller thread
         self.kb = KeyBoardController(self.cfg)
         if self.is_disable_control:
@@ -1305,6 +1308,7 @@ class MapleStoryAutoBot:
         # Terminate web server
         if self.web_server is not None:
             self.web_server.stop()
+            self.web_server = None
         # Terminate alert manager
         if self.alert is not None:
             self.alert.cleanup()
