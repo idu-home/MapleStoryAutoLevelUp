@@ -121,8 +121,9 @@ class KeyBoardController():
         '''
         toggle_enable
         '''
+        old_state = self.is_enable
         self.is_enable = not self.is_enable
-        logger.info(f"Player pressed F1, is_enable:{self.is_enable}")
+        logger.info(f"[KeyBoardController] F1 pressed: {old_state} -> {self.is_enable}")
 
         # Make sure all key are released
         self.release_all_key()

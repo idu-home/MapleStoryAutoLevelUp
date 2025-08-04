@@ -1,0 +1,11 @@
+bot:
+  map: fire_land_2
+directional_attack:
+  range_x: 120
+health_monitor:
+  add_hp_percent: 0
+  add_mp_percent: 0
+key:
+  directional_attack: f
+web_debug:
+  enable: true

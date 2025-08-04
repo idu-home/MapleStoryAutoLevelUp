@@ -10,10 +10,15 @@ from flask_socketio import SocketIO, emit
 import threading
 import time
 import logging
-from .config import DEFAULT_HOST, DEFAULT_PORT, JPEG_QUALITY, CORS_ALLOWED_ORIGINS, TEMPLATE_FOLDER, DEBUG_MODE
-from .utils import image_to_base64, validate_image
+from .config import DEFAULT_HOST, DEFAULT_PORT, JPEG_QUALITY, JPEG_QUALITY_OPTIMIZED, MAX_IMAGE_WIDTH, MAX_IMAGE_WIDTH_MOBILE, CORS_ALLOWED_ORIGINS, TEMPLATE_FOLDER, DEBUG_MODE
+from .utils import image_to_base64, image_to_base64_optimized, validate_image, PerformanceMonitor
 
-logger = logging.getLogger(__name__)
+# Import project logger
+try:
+    from src.utils.logger import logger
+except ImportError:
+    # Fallback to standard logging if project logger not available
+    logger = logging.getLogger(__name__)
 
 class WebDebugServer:
     def __init__(self, host=DEFAULT_HOST, port=DEFAULT_PORT):
@@ -46,6 +51,24 @@ class WebDebugServer:
         self.alert_status = False
         self.alert_lock = threading.Lock()
         
+        # Performance monitoring
+        self.performance_monitor = PerformanceMonitor()
+        self.use_optimized_encoding = True  # Use optimized encoding by default
+        
+        # Adaptive frame rate limiting
+        self.last_frame_time = 0
+        self.target_fps = 15  # Target FPS
+        self.min_frame_interval = 1.0 / self.target_fps
+        self.adaptive_quality = True  # Enable adaptive quality based on performance
+        self.current_quality = JPEG_QUALITY_OPTIMIZED
+        
+        # Performance tracking for adaptive behavior
+        self.recent_frame_times = []
+        self.performance_check_interval = 10  # Check every 10 frames
+        
+        # Client device tracking
+        self.connected_clients = {}  # Track client info for optimization
+        
         # Setup routes
         self._setup_routes()
         
@@ -60,7 +83,13 @@ class WebDebugServer:
                 'status': 'running',
                 'has_debug_frame': self.latest_debug_frame is not None,
                 'has_route_frame': self.latest_route_frame is not None,
-                'alert_active': self.alert_status
+                'alert_active': self.alert_status,
+                'performance': {
+                    'avg_frame_time_ms': round(self.performance_monitor.get_avg_frame_time(), 2),
+                    'avg_encode_time_ms': round(self.performance_monitor.get_avg_encode_time(), 2),
+                    'estimated_fps': round(self.performance_monitor.get_fps(), 1),
+                    'optimized_encoding': self.use_optimized_encoding
+                }
             })
             
         @self.app.route('/api/trigger_alert', methods=['POST'])
@@ -119,6 +148,22 @@ class WebDebugServer:
             except Exception as e:
                 logger.error(f"Error triggering alert: {e}")
                 return jsonify({'error': str(e)}), 500
+        
+        @self.app.route('/api/toggle_optimization', methods=['POST'])
+        def toggle_optimization():
+            """Toggle optimized encoding mode"""
+            try:
+                self.use_optimized_encoding = not self.use_optimized_encoding
+                logger.info(f"Toggled optimized encoding: {self.use_optimized_encoding}")
+                
+                return jsonify({
+                    'success': True,
+                    'optimized_encoding': self.use_optimized_encoding
+                })
+                
+            except Exception as e:
+                logger.error(f"Error toggling optimization: {e}")
+                return jsonify({'error': str(e)}), 500
             
         @self.socketio.on('connect')
         def handle_connect():
@@ -127,54 +172,147 @@ class WebDebugServer:
             
         @self.socketio.on('disconnect')
         def handle_disconnect():
+            from flask import request
             logger.info('Client disconnected from debug server')
+            # Clean up client info
+            if request.sid in self.connected_clients:
+                del self.connected_clients[request.sid]
+        
+        @self.socketio.on('client_info')
+        def handle_client_info(data):
+            """Handle client device information for optimization"""
+            from flask import request
+            self.connected_clients[request.sid] = data
+            logger.info(f'Client info received: {data}')
             
     def _image_to_base64(self, image):
-        """Convert OpenCV image to base64 string"""
-        return image_to_base64(image, JPEG_QUALITY)
+        """Convert OpenCV image to base64 string with adaptive quality"""
+        start_time = time.time()
+        
+        # Use adaptive quality if enabled
+        quality = self.current_quality if self.adaptive_quality else JPEG_QUALITY_OPTIMIZED
+        
+        if self.use_optimized_encoding:
+            # Check if any connected clients are mobile devices
+            is_mobile = any(client.get('is_mobile', False) for client in self.connected_clients.values())
+            max_width = MAX_IMAGE_WIDTH_MOBILE if is_mobile else MAX_IMAGE_WIDTH
+            result = image_to_base64_optimized(image, quality, max_width, is_mobile)
+        else:
+            result = image_to_base64(image, JPEG_QUALITY)
+        
+        encode_time = time.time() - start_time
+        self.performance_monitor.record_encode_time(encode_time)
+        
+        # Track performance for adaptive adjustments
+        self.recent_frame_times.append(encode_time)
+        if len(self.recent_frame_times) > self.performance_check_interval:
+            self.recent_frame_times.pop(0)
+        
+        # Adaptive quality adjustment
+        if self.adaptive_quality and len(self.recent_frame_times) >= self.performance_check_interval:
+            avg_encode_time = sum(self.recent_frame_times) / len(self.recent_frame_times)
+            if avg_encode_time > 0.05:  # If encoding takes more than 50ms
+                self.current_quality = max(20, self.current_quality - 5)  # Reduce quality
+                logger.debug(f"Reducing quality to {self.current_quality} due to slow encoding")
+            elif avg_encode_time < 0.02 and self.current_quality < JPEG_QUALITY_OPTIMIZED:  # If very fast
+                self.current_quality = min(JPEG_QUALITY_OPTIMIZED, self.current_quality + 5)  # Increase quality
+                logger.debug(f"Increasing quality to {self.current_quality}")
+        
+        return result
         
     def update_debug_frame(self, debug_frame, route_frame=None, alert_status=False, sound_command=None):
         """Update debug images and alert status"""
+        # Check if server is running
+        if not self.is_running:
+            logger.debug("[WebDebugServer] Server not running, skipping frame update")
+            return
+            
+        frame_start_time = time.time()
+        
+        # Debug logging for frame updates
+        if hasattr(self, '_last_debug_frame_valid') and self._last_debug_frame_valid != (debug_frame is not None):
+            logger.info(f"[WebDebugServer] Frame validity changed: "
+                       f"debug_frame={'valid' if debug_frame is not None else 'None'}, "
+                       f"route_frame={'valid' if route_frame is not None else 'None'}")
+            self._last_debug_frame_valid = debug_frame is not None
+        
+        # Adaptive rate limiting based on performance
+        current_interval = self.min_frame_interval
+        if self.adaptive_quality:
+            avg_encode_time = self.performance_monitor.get_avg_encode_time() / 1000.0
+            if avg_encode_time > 0.05:  # If encoding is slow
+                current_interval = max(self.min_frame_interval * 2, avg_encode_time * 2)  # Reduce frame rate
+            elif avg_encode_time < 0.02:  # If encoding is fast
+                current_interval = self.min_frame_interval * 0.8  # Slightly increase frame rate
+        
+        if frame_start_time - self.last_frame_time < current_interval:
+            return
+        
         # Validate images
-        if not validate_image(debug_frame) and not validate_image(route_frame):
+        debug_valid = validate_image(debug_frame)
+        route_valid = validate_image(route_frame)
+        
+        if not debug_valid and not route_valid:
+            if hasattr(self, '_last_validation_warn_time') and time.time() - self._last_validation_warn_time > 5:
+                logger.warning(f"[WebDebugServer] No valid frames to send: "
+                             f"debug_valid={debug_valid}, route_valid={route_valid}")
+                self._last_validation_warn_time = time.time()
             return
             
         with self.frame_lock:
-            self.latest_debug_frame = debug_frame.copy() if validate_image(debug_frame) else None
-            self.latest_route_frame = route_frame.copy() if validate_image(route_frame) else None
+            self.latest_debug_frame = debug_frame.copy() if debug_valid else None
+            self.latest_route_frame = route_frame.copy() if route_valid else None
         
         with self.alert_lock:
             self.alert_status = alert_status
             
-        # Send updates via WebSocket
-        if validate_image(debug_frame):
-            debug_b64 = self._image_to_base64(debug_frame)
-            if debug_b64:
-                self.socketio.emit('debug_frame_update', {
-                    'debug_frame': debug_b64,
-                    'timestamp': time.time()
-                })
+        # Send updates via WebSocket only if there are connected clients
+        try:
+            # Send debug frame update
+            if debug_valid:
+                debug_b64 = self._image_to_base64(debug_frame)
+                if debug_b64:
+                    self.socketio.emit('debug_frame_update', {
+                        'debug_frame': debug_b64,
+                        'timestamp': frame_start_time,
+                        'quality': self.current_quality,
+                        'performance': {
+                            'encode_time_ms': round(self.performance_monitor.get_avg_encode_time(), 2),
+                            'frame_time_ms': round((time.time() - frame_start_time) * 1000, 2)
+                        }
+                    })
+                    if hasattr(self, '_last_debug_frame_valid') and not self._last_debug_frame_valid:
+                        logger.info(f"[WebDebugServer] Debug frame emission resumed")
+                
+            # Send route frame update
+            if route_valid:
+                route_b64 = self._image_to_base64(route_frame)
+                if route_b64:
+                    self.socketio.emit('route_frame_update', {
+                        'route_frame': route_b64,
+                        'timestamp': frame_start_time
+                    })
             
-        if validate_image(route_frame):
-            route_b64 = self._image_to_base64(route_frame)
-            if route_b64:
-                self.socketio.emit('route_frame_update', {
-                    'route_frame': route_b64,
-                    'timestamp': time.time()
-                })
-        
-        # Send alert status update
-        self.socketio.emit('alert_status_update', {
-            'alert_active': self.alert_status,
-            'timestamp': time.time()
-        })
-        
-        # Send sound command if provided
-        if sound_command:
-            self.socketio.emit('sound_command', {
-                'command': sound_command,
-                'timestamp': time.time()
+            # Send alert status update
+            self.socketio.emit('alert_status_update', {
+                'alert_active': self.alert_status,
+                'timestamp': frame_start_time
             })
+            
+            # Send sound command if provided
+            if sound_command:
+                self.socketio.emit('sound_command', {
+                    'command': sound_command,
+                    'timestamp': frame_start_time
+                })
+                
+        except Exception as e:
+            logger.warning(f"Failed to emit websocket updates: {e}")
+        
+        # Record performance metrics
+        frame_time = time.time() - frame_start_time
+        self.performance_monitor.record_frame_time(frame_time)
+        self.last_frame_time = frame_start_time
             
     def start(self):
         """Start Web server"""

@@ -1567,6 +1567,24 @@ class MapleStoryAutoBot:
 
         # Check if need viz window
         self.is_show_debug_window = self.is_need_show_debug_window
+        # Web server always needs debug frames, so check if web server is running
+        web_needs_debug = self.web_server is not None
+        
+        # IMPORTANT: If web server is running, always enable debug window processing
+        # This ensures debug frames are generated even when UI viz is disabled
+        if web_needs_debug:
+            self.is_show_debug_window = True
+        
+        # Debug logging for web server state
+        if self.is_first_frame or (hasattr(self, '_last_kb_enable') and self._last_kb_enable != self.kb.is_enable):
+            logger.info(f"[run_once] Bot state: kb.is_enable={self.kb.is_enable}, "
+                       f"is_need_show_debug_window={self.is_need_show_debug_window}, "
+                       f"is_show_debug_window={self.is_show_debug_window}, "
+                       f"web_needs_debug={web_needs_debug}, "
+                       f"web_server={self.web_server is not None}")
+            self._last_kb_enable = self.kb.is_enable
+        
+        # Set debug frames to None if debug window is not needed
         if not self.is_show_debug_window:
             self.img_frame_debug = None
             self.img_route_debug = None
@@ -1586,9 +1604,14 @@ class MapleStoryAutoBot:
         # Grayscale game window
         self.img_frame_gray = cv2.cvtColor(self.img_frame, cv2.COLOR_BGR2GRAY)
 
-        # Image for debug viz
+        # Image for debug viz - create if needed for viz window OR web server
         if self.is_show_debug_window:
             self.img_frame_debug = self.img_frame.copy()
+            if self.is_first_frame or (hasattr(self, '_last_kb_enable') and self._last_kb_enable != self.kb.is_enable):
+                logger.info(f"[run_once] Created debug frame: shape={self.img_frame_debug.shape if self.img_frame_debug is not None else None}")
+        else:
+            if self.is_first_frame or (hasattr(self, '_last_kb_enable') and self._last_kb_enable != self.kb.is_enable):
+                logger.info(f"[run_once] Debug frame NOT created - no viz or web needs")
 
         # Get current route image
         if self.cfg["bot"]["mode"] == "normal":
@@ -1744,24 +1767,26 @@ class MapleStoryAutoBot:
         #####################
         ### Debug Windows ###
         #####################
-        # Don't show debug window to save system resource
+        # Process debug frames if needed for viz window or web server
+        if self.is_show_debug_window:
+            # Print text on debug image
+            self.update_info_on_img_frame_debug()
+
+            # Save debug window to video
+            if self.video_writer:
+                self.video_writer.write(self.img_frame_debug)
+
+            # Resize img_route_debug for better visualization
+            if self.cfg["bot"]["mode"] == "normal":
+                self.img_route_debug = cv2.resize(
+                            self.img_route_debug, (0, 0),
+                            fx=self.cfg["minimap"]["debug_window_upscale"],
+                            fy=self.cfg["minimap"]["debug_window_upscale"],
+                            interpolation=cv2.INTER_NEAREST)
+        
+        # Early return only if no debug processing is needed at all
         if not self.is_show_debug_window:
             return 0 # frame done
-
-        # Print text on debug image
-        self.update_info_on_img_frame_debug()
-
-        # Save debug window to video
-        if self.video_writer:
-            self.video_writer.write(self.img_frame_debug)
-
-        # Resize img_route_debug for better visualization
-        if self.cfg["bot"]["mode"] == "normal":
-            self.img_route_debug = cv2.resize(
-                        self.img_route_debug, (0, 0),
-                        fx=self.cfg["minimap"]["debug_window_upscale"],
-                        fy=self.cfg["minimap"]["debug_window_upscale"],
-                        interpolation=cv2.INTER_NEAREST)
 
         self.profiler.mark("Debug Window Show")
 
@@ -1794,7 +1819,12 @@ class MapleStoryAutoBot:
             self.is_frame_done = False
             ret = self.run_once()
 
-            # Only proceed if the frame is valid
+            # Always try to update web server, even if main processing failed
+            # This ensures web clients get updates even when paused
+            if self.web_server is not None:
+                self._update_web_debug_server()
+            
+            # Only proceed with UI updates if the frame is valid
             if ret == 0:
                 # Draw image on debug window
                 if self.is_show_debug_window and self.is_ui:
@@ -1809,19 +1839,16 @@ class MapleStoryAutoBot:
                     is_alert_active = self.alert.is_rune_alert_playing()
                     self.alert_status_signal.emit(is_alert_active)
                 
-                # Update web debug server
-                if self.web_server is not None and self.is_show_debug_window:
-                    debug_frame = self.img_frame_debug[:self.cfg["ui_coords"]["ui_y_start"], :] if self.img_frame_debug is not None else None
-                    route_frame = self.img_route_debug if self.img_route_debug is not None else None
-                    alert_status = self.alert.is_rune_alert_playing()
-                    self.web_server.update_debug_frame(debug_frame, route_frame, alert_status)
-                
                 # Update web debug server config if in UI mode
                 if self.is_ui:
                     self.update_web_debug_config()
             else:
-                pass
-                # logger.warning("Skipped debug window update due to invalid frame.")
+                # Even when frame processing fails, try to provide status to web clients
+                if self.web_server is not None:
+                    # Create a simple status frame
+                    status_frame = self._create_status_frame()
+                    if status_frame is not None:
+                        self.web_server.update_debug_frame(status_frame, None, False)
 
             self.is_frame_done = True
 
@@ -1830,6 +1857,82 @@ class MapleStoryAutoBot:
             target_duration = 1.0 / self.cfg["system"]["fps_limit_main"]
             if frame_duration < target_duration:
                 time.sleep(target_duration - frame_duration)
+
+    def _update_web_debug_server(self):
+        """Update web debug server with current frames"""
+        debug_frame = None
+        route_frame = None
+        
+        # Debug logging for web server update
+        if hasattr(self, '_last_kb_enable') and self._last_kb_enable != self.kb.is_enable:
+            logger.info(f"[_update_web_debug_server] State change detected: "
+                       f"img_frame_debug={self.img_frame_debug is not None}, "
+                       f"img_frame={self.img_frame is not None}, "
+                       f"kb.is_enable={self.kb.is_enable}")
+        
+        # Priority: use debug frame if available, otherwise create from original
+        if self.img_frame_debug is not None:
+            debug_frame = self.img_frame_debug[:self.cfg["ui_coords"]["ui_y_start"], :].copy()
+            if hasattr(self, '_last_kb_enable') and self._last_kb_enable != self.kb.is_enable:
+                logger.info(f"[_update_web_debug_server] Using existing debug frame: shape={debug_frame.shape}")
+        elif self.img_frame is not None:
+            # Create debug frame from original frame when debug processing is disabled
+            debug_frame = self.img_frame[:self.cfg["ui_coords"]["ui_y_start"], :].copy()
+            if hasattr(self, '_last_kb_enable') and self._last_kb_enable != self.kb.is_enable:
+                logger.info(f"[_update_web_debug_server] Creating fallback debug frame: shape={debug_frame.shape}")
+            # Add basic debug info even without full debug processing
+            bot_status = "PAUSED" if not self.kb.is_enable else "RUNNING"
+            status_color = (0, 0, 255) if not self.kb.is_enable else (0, 255, 0)
+            cv2.putText(debug_frame, f"Status: {bot_status}", 
+                      (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, status_color, 2)
+            cv2.putText(debug_frame, f"State: {self.fsm.state.name}", 
+                      (10, 60), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            cv2.putText(debug_frame, f"FPS: {self.fps}", 
+                      (10, 90), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+            # Add pause indicator
+            if not self.kb.is_enable:
+                cv2.putText(debug_frame, "PAUSED - Press F1 to Resume", 
+                          (10, 130), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
+            # Draw player location if available
+            if hasattr(self, 'loc_player') and self.loc_player is not None:
+                cv2.circle(debug_frame, self.loc_player, radius=3, color=(0, 0, 255), thickness=-1)
+        
+        # Handle route frame
+        if self.img_route_debug is not None:
+            route_frame = self.img_route_debug.copy()
+        elif hasattr(self, 'img_route') and self.img_route is not None and self.cfg["bot"]["mode"] == "normal":
+            # Convert route from RGB to BGR for web display
+            route_frame = cv2.cvtColor(self.img_route, cv2.COLOR_RGB2BGR)
+        
+        alert_status = self.alert.is_rune_alert_playing() if self.alert else False
+        self.web_server.update_debug_frame(debug_frame, route_frame, alert_status)
+
+    def _create_status_frame(self):
+        """Create a status frame when main processing fails"""
+        try:
+            # Create a blank frame with status information
+            frame = np.zeros((400, 600, 3), dtype=np.uint8)
+            
+            # Add status text
+            cv2.putText(frame, "MapleStory Auto Bot", (50, 50), 
+                      cv2.FONT_HERSHEY_SIMPLEX, 1.2, (255, 255, 255), 2)
+            
+            bot_status = "PAUSED" if not self.kb.is_enable else "WAITING FOR GAME"
+            status_color = (0, 0, 255) if not self.kb.is_enable else (255, 255, 0)
+            cv2.putText(frame, f"Status: {bot_status}", (50, 120), 
+                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, status_color, 2)
+            
+            cv2.putText(frame, "Press F1 to resume/pause", (50, 180), 
+                      cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
+            
+            if hasattr(self, 'capture') and self.capture:
+                cv2.putText(frame, "Waiting for game window...", (50, 220), 
+                          cv2.FONT_HERSHEY_SIMPLEX, 0.6, (200, 200, 200), 2)
+            
+            return frame
+        except Exception as e:
+            logger.warning(f"Failed to create status frame: {e}")
+            return None
 
     def update_web_debug_config(self):
         """Update web debug server based on current config"""

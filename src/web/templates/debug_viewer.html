@@ -196,12 +196,51 @@
         }
         
         @media (max-width: 768px) {
+            body {
+                padding: 10px;
+            }
+            
             .image-container {
                 flex-direction: column;
             }
             
             .image-panel {
                 min-width: auto;
+                margin-bottom: 15px;
+            }
+            
+            .status-bar {
+                flex-wrap: wrap;
+                gap: 10px;
+            }
+            
+            .fps-counter {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+                font-size: 11px;
+            }
+            
+            .controls {
+                display: flex;
+                flex-wrap: wrap;
+                gap: 5px;
+            }
+            
+            .debug-image, .route-image {
+                max-width: 100%;
+                height: auto;
+                /* Ensure high-quality scaling on mobile */
+                image-rendering: -webkit-optimize-contrast;
+                image-rendering: crisp-edges;
+            }
+        }
+        
+        /* High DPI displays optimization */
+        @media (-webkit-min-device-pixel-ratio: 2), (min-resolution: 192dpi) {
+            .debug-image, .route-image {
+                image-rendering: -webkit-optimize-contrast;
+                image-rendering: crisp-edges;
             }
         }
     </style>
@@ -222,12 +261,22 @@
         </div>
         <div class="fps-counter">
             <span id="fps-text">FPS: --</span>
+            <span id="latency-text" style="margin-left: 10px; color: #888;">延迟: --ms</span>
+            <span id="encode-text" style="margin-left: 10px; color: #888;">编码: --ms</span>
+            <span id="quality-text" style="margin-left: 10px; color: #888;">质量: --</span>
         </div>
         <div class="controls">
             <button id="refresh-btn" class="btn" onclick="location.reload()">刷新页面</button>
             <button id="test-sound-btn" class="btn" onclick="testAudio()">测试音频</button>
+            <button id="toggle-opt-btn" class="btn" onclick="toggleOptimization()">切换优化模式</button>
             <div id="audio-status" style="display: inline-block; margin-left: 10px; font-size: 12px; color: #888;">
                 🔇 音频未激活
+            </div>
+            <div id="optimization-status" style="display: inline-block; margin-left: 10px; font-size: 12px; color: #888;">
+                🚀 优化模式: --
+            </div>
+            <div id="device-status" style="display: inline-block; margin-left: 10px; font-size: 12px; color: #888;">
+                📱 设备: --
             </div>
         </div>
     </div>
@@ -270,6 +319,25 @@
         // 连接WebSocket
         const socket = io();
         
+        // 检测设备类型和发送客户端信息
+        function detectDevice() {
+            const userAgent = navigator.userAgent;
+            const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+            const devicePixelRatio = window.devicePixelRatio || 1;
+            const screenWidth = window.screen.width;
+            const screenHeight = window.screen.height;
+            
+            return {
+                is_mobile: isMobile,
+                device_pixel_ratio: devicePixelRatio,
+                screen_width: screenWidth,
+                screen_height: screenHeight,
+                user_agent: userAgent,
+                viewport_width: window.innerWidth,
+                viewport_height: window.innerHeight
+            };
+        }
+        
         // DOM元素
         const connectionDot = document.getElementById('connection-dot');
         const connectionStatus = document.getElementById('connection-status');
@@ -280,6 +348,9 @@
         const routePlaceholder = document.getElementById('route-placeholder');
         const routeInfo = document.getElementById('route-info');
         const fpsText = document.getElementById('fps-text');
+        const latencyText = document.getElementById('latency-text');
+        const encodeText = document.getElementById('encode-text');
+        const qualityText = document.getElementById('quality-text');
         const alertStatus = document.getElementById('alert-status');
         const alertIcon = document.getElementById('alert-icon');
         const alertText = document.getElementById('alert-text');
@@ -300,6 +371,16 @@
             connectionStatus.textContent = '已连接';
             debugInfo.textContent = '状态: 已连接，等待图像...';
             routeInfo.textContent = '状态: 已连接，等待图像...';
+            
+            // 发送客户端设备信息以进行优化
+            const deviceInfo = detectDevice();
+            socket.emit('client_info', deviceInfo);
+            console.log('📱 Device info sent:', deviceInfo);
+            
+            // 更新设备状态显示
+            const deviceStatus = document.getElementById('device-status');
+            deviceStatus.textContent = `📱 设备: ${deviceInfo.is_mobile ? '移动端' : '桌面端'} (${deviceInfo.screen_width}x${deviceInfo.screen_height})`;
+            deviceStatus.style.color = deviceInfo.is_mobile ? '#ff9800' : '#4CAF50';
         });
         
         socket.on('disconnect', function() {
@@ -320,17 +401,41 @@
                 debugImage.src = data.debug_frame;
                 debugImage.style.display = 'block';
                 debugPlaceholder.style.display = 'none';
-                debugInfo.textContent = `状态: 已更新 (${new Date().toLocaleTimeString()})`;
                 
-                // 更新FPS
-                frameCount++;
                 const now = Date.now();
+                const serverTime = data.timestamp * 1000; // Convert to milliseconds
+                const latency = now - serverTime;
+                
+                debugInfo.textContent = `状态: 已更新 (${new Date().toLocaleTimeString()}) - 延迟: ${latency}ms`;
+                
+                // 更新性能指标
+                frameCount++;
                 if (now - lastFpsTime >= 1000) {
                     fps = frameCount;
                     frameCount = 0;
                     lastFpsTime = now;
                 }
                 fpsText.textContent = `FPS: ${fps}`;
+                latencyText.textContent = `延迟: ${latency}ms`;
+                
+                // 显示编码时间和其他性能指标（如果可用）
+                if (data.performance && data.performance.encode_time_ms) {
+                    encodeText.textContent = `编码: ${data.performance.encode_time_ms}ms`;
+                }
+                
+                // 显示图像质量信息
+                if (data.quality) {
+                    qualityText.textContent = `质量: ${data.quality}%`;
+                }
+                
+                // 延迟警告
+                if (latency > 200) {
+                    latencyText.style.color = '#ff4444'; // 红色表示高延迟
+                } else if (latency > 100) {
+                    latencyText.style.color = '#ffaa00'; // 橙色表示中等延迟
+                } else {
+                    latencyText.style.color = '#4CAF50'; // 绿色表示低延迟
+                }
             }
         });
         
@@ -566,6 +671,63 @@
                 }, 3000);
             }, 100);
         }
+        
+        // 切换优化模式
+        async function toggleOptimization() {
+            try {
+                const response = await fetch('/api/toggle_optimization', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    updateOptimizationStatus(result.optimized_encoding);
+                    console.log('Optimization mode toggled:', result.optimized_encoding);
+                } else {
+                    console.error('Failed to toggle optimization:', result.error);
+                }
+            } catch (error) {
+                console.error('Error toggling optimization:', error);
+            }
+        }
+        
+        // 更新优化状态显示
+        function updateOptimizationStatus(isOptimized) {
+            const optimizationStatus = document.getElementById('optimization-status');
+            if (isOptimized) {
+                optimizationStatus.textContent = '🚀 优化模式: 开启';
+                optimizationStatus.style.color = '#4CAF50';
+            } else {
+                optimizationStatus.textContent = '🚀 优化模式: 关闭';
+                optimizationStatus.style.color = '#888';
+            }
+        }
+        
+        // 获取服务器状态
+        async function fetchServerStatus() {
+            try {
+                const response = await fetch('/api/status');
+                const status = await response.json();
+                
+                if (status.performance) {
+                    updateOptimizationStatus(status.performance.optimized_encoding);
+                    
+                    // 显示服务器端性能信息
+                    console.log('Server performance:', status.performance);
+                }
+            } catch (error) {
+                console.error('Error fetching server status:', error);
+            }
+        }
+        
+        // 定期获取服务器状态
+        setInterval(fetchServerStatus, 5000);
+        
+        // 初始化时获取状态
+        fetchServerStatus();
         
         // 页面卸载时断开连接
         window.onbeforeunload = function() {
