@@ -42,6 +42,8 @@ This work purely-based on Computer Vision technique, it doesn't required access 
 
 ✅ Visualization window for debugging
 
+✅ Web-based debug viewer (real-time remote monitoring)
+
 ✅ Auto HP/MP potion drink
 
 ✅ Auto change channel
@@ -98,6 +100,12 @@ python -m src.engine.MapleStoryAutoLevelUp --disable_viz
 ```
 python -m src.engine.MapleStoryAutoLevelUp --record
 ```
+
+#### Run with Web debug viewer
+```
+python -m src.engine.MapleStoryAutoLevelUp --cfg web_debug
+```
+Then open http://localhost:5001 in your browser to view real-time debug images.
 #### Choose map via config_custom.yaml
 Edit your map selection in the config file:
 ```

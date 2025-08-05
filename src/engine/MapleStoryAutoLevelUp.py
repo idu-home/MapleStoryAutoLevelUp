@@ -37,6 +37,7 @@ from src.engine.HealthMonitor import HealthMonitor
 from src.engine.Profiler import Profiler
 from src.engine.RuneSolver import RuneSolver
 from src.engine.FiniteStateMachine import FiniteStateMachine
+from src.engine.Alert import Alert
 from src.states.hunting import HuntingState
 from src.states.finding_rune import FindingRuneState
 from src.states.near_rune import NearRuneState
@@ -119,6 +120,7 @@ class MapleStoryAutoBot:
         self.health_monitor = None # Health monitor
         self.profiler = None # Profiler, for performance issue debugging
         self.rune_solver = None # Rune solver
+        self.alert = None # Alert manager for sound alerts
 
         # Finite State Machine
         self.fsm = FiniteStateMachine()
@@ -137,13 +139,14 @@ class MapleStoryAutoBot:
         self.fsm.add_transition("solving_rune", "hunting") # After rune solving
         self.fsm.set_init_state("hunting")
 
-    def update_signals(self, image_debug_signal, route_map_viz_signal):
+    def update_signals(self, image_debug_signal, route_map_viz_signal, alert_status_signal=None):
         '''
         Update signal from UI framework.
         For debug window viz
         '''
         self.image_debug_signal = image_debug_signal
         self.route_map_viz_signal = route_map_viz_signal
+        self.alert_status_signal = alert_status_signal
 
     def load_config(self, cfg):
         '''
@@ -271,6 +274,9 @@ class MapleStoryAutoBot:
 
         # Init rune solver
         self.rune_solver = RuneSolver(self.cfg)
+
+        # Init alert manager
+        self.alert = Alert(self.cfg)
 
         # Reset all timers
         self.t_last_frame = time.time()
@@ -1286,6 +1292,9 @@ class MapleStoryAutoBot:
         # Terminate health monitor
         if self.health_monitor is not None:
             self.health_monitor.stop()
+        # Terminate alert manager
+        if self.alert is not None:
+            self.alert.cleanup()
         self.is_terminated = True
         logger.info(f"[terminate_threads] Terminated all threads")
 
@@ -1543,11 +1552,8 @@ class MapleStoryAutoBot:
         # Start profiler for performance debugging
         self.profiler.start()
 
-        # Check if need viz window
-        self.is_show_debug_window = self.is_need_show_debug_window
-        if not self.is_show_debug_window:
-            self.img_frame_debug = None
-            self.img_route_debug = None
+        # Always show debug window
+        self.is_show_debug_window = True
 
         ###########################
         ### Image Preprocessing ###
@@ -1722,24 +1728,22 @@ class MapleStoryAutoBot:
         #####################
         ### Debug Windows ###
         #####################
-        # Don't show debug window to save system resource
-        if not self.is_show_debug_window:
-            return 0 # frame done
+        # Process debug frames if needed for viz window or web server
+        if self.is_show_debug_window:
+            # Print text on debug image
+            self.update_info_on_img_frame_debug()
 
-        # Print text on debug image
-        self.update_info_on_img_frame_debug()
+            # Save debug window to video
+            if self.video_writer:
+                self.video_writer.write(self.img_frame_debug)
 
-        # Save debug window to video
-        if self.video_writer:
-            self.video_writer.write(self.img_frame_debug)
-
-        # Resize img_route_debug for better visualization
-        if self.cfg["bot"]["mode"] == "normal":
-            self.img_route_debug = cv2.resize(
-                        self.img_route_debug, (0, 0),
-                        fx=self.cfg["minimap"]["debug_window_upscale"],
-                        fy=self.cfg["minimap"]["debug_window_upscale"],
-                        interpolation=cv2.INTER_NEAREST)
+            # Resize img_route_debug for better visualization
+            if self.cfg["bot"]["mode"] == "normal":
+                self.img_route_debug = cv2.resize(
+                            self.img_route_debug, (0, 0),
+                            fx=self.cfg["minimap"]["debug_window_upscale"],
+                            fy=self.cfg["minimap"]["debug_window_upscale"],
+                            interpolation=cv2.INTER_NEAREST)
 
         self.profiler.mark("Debug Window Show")
 
@@ -1772,7 +1776,12 @@ class MapleStoryAutoBot:
             self.is_frame_done = False
             ret = self.run_once()
 
-            # Only proceed if the frame is valid
+            # Always try to update web server, even if main processing failed
+            # This ensures web clients get updates even when paused
+            if self.web_server is not None:
+                self._update_web_debug_server()
+            
+            # Only proceed with UI updates if the frame is valid
             if ret == 0:
                 # Draw image on debug window
                 if self.is_show_debug_window and self.is_ui:
@@ -1781,6 +1790,12 @@ class MapleStoryAutoBot:
                     img_route_debug_emit = self.img_route_debug.copy()
                     self.image_debug_signal.emit(img_frame_debug_emit)
                     self.route_map_viz_signal.emit(img_route_debug_emit)
+
+                # Update alert status
+                if self.is_ui and self.alert_status_signal is not None:
+                    is_alert_active = self.alert.is_rune_alert_playing()
+                    self.alert_status_signal.emit(is_alert_active)
+
             else:
                 pass
                 # logger.warning("Skipped debug window update due to invalid frame.")
@@ -1792,6 +1807,24 @@ class MapleStoryAutoBot:
             target_duration = 1.0 / self.cfg["system"]["fps_limit_main"]
             if frame_duration < target_duration:
                 time.sleep(target_duration - frame_duration)
+
+    def _update_web_debug_server(self):
+        """Update web debug server with current frames"""
+        if self.web_server is None:
+            return
+            
+        # Use processed debug frame (already contains all debug info)
+        debug_frame = None
+        if self.img_frame_debug is not None:
+            debug_frame = self.img_frame_debug[:self.cfg["ui_coords"]["ui_y_start"], :].copy()
+        
+        # Use processed route debug frame
+        route_frame = self.img_route_debug.copy() if self.img_route_debug is not None else None
+        
+        # Get alert status
+        alert_status = self.alert.is_rune_alert_playing() if self.alert else False
+        
+        self.web_server.update_debug_frame(debug_frame, route_frame, alert_status)
 
 def main(args):
     '''

@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(claude config)",
+      "Bash(claude config list)",
+      "Bash(python:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(echo $PATH)",
+      "Bash(ls:*)",
+      "Bash(echo $SHELL)",
+      "Bash(echo $0)",
+      "Bash(ps:*)",
+      "Bash(mkdir:*)",
+      "Bash(pip install:*)",
+      "Bash(python:*)",
+      "Bash(find:*)"
+    ],
+    "deny": []
+  }
+}

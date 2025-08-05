@@ -1,0 +1,10 @@
+bot:
+  map: cloud_balcony
+directional_attack:
+  range_x: 120
+health_monitor:
+  add_hp_percent: 0
+  add_mp_percent: 0
+key:
+  directional_attack: f
+  return_home: "\u2196"

@@ -17,6 +17,7 @@ class AutoBotController(QObject):
     '''
     debug_image_signal = Signal(object)
     route_map_viz_signal = Signal(object)
+    alert_status_signal = Signal(bool)  # Signal for alert status updates
 
     def __init__(self):
         """
@@ -47,10 +48,20 @@ class AutoBotController(QObject):
 
         # Update signal for debug window viz
         self.auto_bot.update_signals(self.debug_image_signal,
-                                     self.route_map_viz_signal)
+                                     self.route_map_viz_signal,
+                                     self.alert_status_signal)
 
         # Monitor function keys
         self.kb_listener = KeyBoardListener(is_autobot=True)
+
+    def start(self, web_server):
+        '''
+        Start web server
+        '''
+        self.auto_bot.web_server = web_server
+
+        web_server.start()
+        logger.info(f"Web debug server started at {self.auto_bot.web_server.get_url()}")
 
     def toggle_enable(self):
         '''
@@ -68,6 +79,7 @@ class AutoBotController(QObject):
         '''
         self.debug_image_signal.connect(ui.update_debug_canvas)
         self.route_map_viz_signal.connect(ui.update_route_map_canvas)
+        self.alert_status_signal.connect(ui.update_alert_status)
         # Register Function Key handler
         self.kb_listener.register_func_key_handler('f1', ui.button_start_pause.click)
         self.kb_listener.register_func_key_handler('f2', ui.button_screenshot.click)
