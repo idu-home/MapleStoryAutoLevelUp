@@ -1,10 +1,13 @@
 bot:
   map: cloud_balcony
 directional_attack:
-  range_x: 120
+  range_x: 200
+  range_y: 100
 health_monitor:
   add_hp_percent: 0
   add_mp_percent: 0
 key:
   directional_attack: f
   return_home: "\u2196"
+system:
+  fps_limit_main: 15

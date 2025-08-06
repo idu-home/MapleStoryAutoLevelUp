@@ -57,6 +57,7 @@ class MapleStoryAutoBot:
         self.cfg = None # Configuration
         self.idx_routes = 0 # Index of route map
         self.monsters_info = {} # monster information
+        self.monsters_template_cache = {} # cached preprocessed monster templates for contour detection
         self.monsters = [] # monster detected in current frame
         self.fps = 0 # Frame per second
         self.red_dot_center_prev = None # previous other player location in minimap
@@ -203,6 +204,9 @@ class MapleStoryAutoBot:
                     return -1
                     # raise RuntimeError(f"No images found in monster/{monster_name}/{monster_name}*")
             logger.info(f"Loaded monsters: {list(self.monsters_info.keys())}")
+            
+            # Preprocess and cache monster templates for contour detection
+            self._preprocess_monster_templates()
 
         # Load player's name tag
         if cfg["nametag"]["enable"]:
@@ -751,6 +755,133 @@ class MapleStoryAutoBot:
 
         return nearest_monster
 
+    def _preprocess_monster_templates(self):
+        '''
+        Preprocess and cache monster templates for contour detection optimization.
+        This eliminates repetitive black pixel extraction and Gaussian blur operations
+        during runtime, significantly improving performance.
+        '''
+        try:
+            logger.info("Preprocessing monster templates for contour detection...")
+            
+            self.monsters_template_cache = {}
+            blur_kernel_size = self.cfg["monster_detect"]["contour_blur"]
+            
+            total_templates = 0
+            for monster_name, monster_imgs in self.monsters_info.items():
+                cached_templates = []
+                
+                for img_monster, mask_monster in monster_imgs:
+                    try:
+                        # Extract black pixel contours (same logic as runtime)
+                        mask_pattern = np.all(img_monster == [0, 0, 0], axis=2).astype(np.uint8) * 255
+                        
+                        # Apply Gaussian blur for contour smoothing
+                        img_monster_blur = cv2.GaussianBlur(mask_pattern, (blur_kernel_size, blur_kernel_size), 0)
+                        
+                        # Store preprocessed template with original image info
+                        cached_templates.append({
+                            'blurred_contour': img_monster_blur,
+                            'original_size': img_monster.shape[:2]  # (height, width)
+                        })
+                        total_templates += 1
+                    except Exception as e:
+                        logger.error(f"Failed to preprocess template for {monster_name}: {e}")
+                        continue
+                
+                if cached_templates:
+                    self.monsters_template_cache[monster_name] = cached_templates
+            
+            logger.info(f"Preprocessed {total_templates} monster templates with contour blur kernel size {blur_kernel_size}")
+            
+        except Exception as e:
+            logger.error(f"Template preprocessing failed: {e}. Falling back to runtime processing.")
+            self.monsters_template_cache = {}  # Clear cache on failure
+
+    def _detect_monsters_with_cached_contours(self, monster_name, img_roi, char_y_min, char_y_max, 
+                                            char_x_min, char_x_max, x0, y0, monsters):
+        '''
+        Optimized contour detection using cached preprocessed templates.
+        This eliminates repetitive black pixel extraction and Gaussian blur operations.
+        '''
+        # Create ROI contour mask once (same logic as original)
+        mask_roi = np.all(img_roi == [0, 0, 0], axis=2).astype(np.uint8) * 255
+        
+        # Zero out mask inside player character region
+        mask_roi[char_y_min:char_y_max, char_x_min:char_x_max] = 0
+        
+        # Apply Gaussian blur to ROI (only once per detection cycle)
+        blur = self.cfg["monster_detect"]["contour_blur"]
+        img_roi_blur = cv2.GaussianBlur(mask_roi, (blur, blur), 0)
+        
+        # Get ROI dimensions for size checking
+        h_roi, w_roi = img_roi_blur.shape[:2]
+        
+        # Use cached templates for this monster
+        if monster_name in self.monsters_template_cache:
+            for cached_template in self.monsters_template_cache[monster_name]:
+                img_monster_blur = cached_template['blurred_contour']
+                h_temp, w_temp = img_monster_blur.shape[:2]
+                
+                # Skip if template is bigger than ROI
+                if h_temp > h_roi or w_temp > w_roi:
+                    continue
+                
+                # Perform template matching using cached blurred contour
+                res = cv2.matchTemplate(img_roi_blur, img_monster_blur, cv2.TM_SQDIFF_NORMED)
+                
+                # Apply threshold and collect matches
+                match_locations = np.where(res <= self.cfg["monster_detect"]["diff_thres"])
+                
+                # Use original image size from cached data
+                h, w = cached_template['original_size']
+                for pt in zip(*match_locations[::-1]):
+                    monsters.append({
+                        "name": monster_name,
+                        "position": (pt[0] + x0, pt[1] + y0),
+                        "size": (h, w),
+                        "score": res[pt[1], pt[0]],
+                    })
+
+    def _detect_monsters_original_contours(self, monster_name, img_monster, img_roi, char_y_min, char_y_max, 
+                                         char_x_min, char_x_max, x0, y0, monsters):
+        '''
+        Original contour detection method as fallback when caching fails.
+        '''
+        # Create masks (same as original logic)
+        mask_pattern = np.all(img_monster == [0, 0, 0], axis=2).astype(np.uint8) * 255
+        mask_roi = np.all(img_roi == [0, 0, 0], axis=2).astype(np.uint8) * 255
+
+        # Zero out mask inside this region (ignore player's own character)
+        mask_roi[char_y_min:char_y_max, char_x_min:char_x_max] = 0
+
+        # Apply Gaussian blur (soften the masks)
+        blur = self.cfg["monster_detect"]["contour_blur"]
+        img_monster_blur = cv2.GaussianBlur(mask_pattern, (blur, blur), 0)
+        img_roi_blur = cv2.GaussianBlur(mask_roi, (blur, blur), 0)
+
+        # Check template vs ROI size before matching
+        h_roi, w_roi = img_roi_blur.shape[:2]
+        h_temp, w_temp = img_monster_blur.shape[:2]
+
+        if h_temp > h_roi or w_temp > w_roi:
+            return  # template bigger than roi, skip this matching
+
+        # Perform template matching
+        res = cv2.matchTemplate(img_roi_blur, img_monster_blur, cv2.TM_SQDIFF_NORMED)
+
+        # Apply soft threshold
+        match_locations = np.where(res <= self.cfg["monster_detect"]["diff_thres"])
+
+        h, w = img_monster.shape[:2]
+        for pt in zip(*match_locations[::-1]):
+            monsters.append({
+                "name": monster_name,
+                "position": (pt[0] + x0, pt[1] + y0),
+                "size": (h, w),
+                "score": res[pt[1], pt[0]],
+            })
+
     def get_monsters_in_range(self, top_left, bottom_right):
         '''
         get_monsters_in_range
@@ -809,40 +940,18 @@ class MapleStoryAutoBot:
                                 "score": 1.0,
                             })
                 elif self.cfg["monster_detect"]["mode"] == "contour_only":
-                    # Use only black lines contour to detect monsters
-                    # Create masks (already grayscale)
-                    mask_pattern = np.all(img_monster == [0, 0, 0], axis=2).astype(np.uint8) * 255
-                    mask_roi = np.all(img_roi == [0, 0, 0], axis=2).astype(np.uint8) * 255
-
-                    # Zero out mask inside this region (ignore player's own character)
-                    mask_roi[char_y_min:char_y_max, char_x_min:char_x_max] = 0
-
-                    # Apply Gaussian blur (soften the masks)
-                    blur = self.cfg["monster_detect"]["contour_blur"]
-                    img_monster_blur = cv2.GaussianBlur(mask_pattern, (blur, blur), 0)
-                    img_roi_blur = cv2.GaussianBlur(mask_roi, (blur, blur), 0)
-
-                    # Check template vs ROI size before matching
-                    h_roi, w_roi = img_roi_blur.shape[:2]
-                    h_temp, w_temp = img_monster_blur.shape[:2]
-
-                    if h_temp > h_roi or w_temp > w_roi:
-                        return []  # template bigger than roi, skip this matching
-
-                    # Perform template matching
-                    res = cv2.matchTemplate(img_roi_blur, img_monster_blur, cv2.TM_SQDIFF_NORMED)
-
-                    # Apply soft threshold
-                    match_locations = np.where(res <= self.cfg["monster_detect"]["diff_thres"])
-
-                    h, w = img_monster.shape[:2]
-                    for pt in zip(*match_locations[::-1]):
-                        monsters.append({
-                            "name": monster_name,
-                            "position": (pt[0] + x0, pt[1] + y0),
-                            "size": (h, w),
-                            "score": res[pt[1], pt[0]],
-                        })
+                    # Use optimized cached contour detection if available, otherwise fallback to original
+                    if self.monsters_template_cache and monster_name in self.monsters_template_cache:
+                        self._detect_monsters_with_cached_contours(
+                            monster_name, img_roi, char_y_min, char_y_max, 
+                            char_x_min, char_x_max, x0, y0, monsters
+                        )
+                    else:
+                        # Fallback to original contour detection
+                        self._detect_monsters_original_contours(
+                            monster_name, img_monster, img_roi, char_y_min, char_y_max, 
+                            char_x_min, char_x_max, x0, y0, monsters
+                        )
                 elif self.cfg["monster_detect"]["mode"] == "grayscale":
                     img_monster_gray = cv2.cvtColor(img_monster, cv2.COLOR_BGR2GRAY)
                     img_roi_gray = cv2.cvtColor(img_roi, cv2.COLOR_BGR2GRAY)
