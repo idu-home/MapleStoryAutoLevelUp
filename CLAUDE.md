@@ -103,7 +103,7 @@ The bot uses a finite state machine (`src/engine/FiniteStateMachine.py`) with th
 - **Health Monitor** (`src/engine/HealthMonitor.py`) - Auto HP/MP potion usage
 - **Rune Solver** (`src/engine/RuneSolver.py`) - Automatic rune mini-game solving
 - **Alert System** (`src/engine/Alert.py`) - Sound notifications
-- **Web Interface** (`src/web_interface/`) - Remote control via web browser
+- **Web Interface** (`src/web/`) - Remote control via web browser
 - **Legacy Web Debug Server** (`src/web/`) - Real-time remote monitoring via web interface
 
 ### Configuration System
@@ -165,8 +165,8 @@ The new web interface provides remote control capabilities:
 - `--mode both` - Both UI and web interface running simultaneously
 
 **Web Interface Components:**
-- `src/web_interface/server.py` - FastAPI server with REST API and WebSocket
-- `src/web_interface/static/` - Frontend HTML/CSS/JavaScript
+- `src/web/server.py` - FastAPI server with REST API and WebSocket
+- `src/web/templates/` - Frontend HTML/CSS/JavaScript
 - Bot control: Start/pause, screenshot, recording
 - Real-time status updates via WebSocket
 - Responsive design for mobile and desktop access
@@ -181,7 +181,7 @@ The new web interface provides remote control capabilities:
 - `WS /ws` - WebSocket for real-time updates
 
 **Configuration:**
-- Web settings in `config/config_default.yaml` under `web_interface` section
+- Web settings in `config/config_default.yaml` under `web` section
 - Configurable host, port, image quality, and auto-save settings
 - Coexists with existing UI configuration system
 

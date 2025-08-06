@@ -137,9 +137,55 @@
             cursor: not-allowed;
         }
         
+        .btn-success {
+            background-color: #28a745;
+        }
+        
+        .btn-success:hover {
+            background-color: #218838;
+        }
+        
+        .btn-warning {
+            background-color: #ffc107;
+            color: #212529;
+        }
+        
+        .btn-warning:hover {
+            background-color: #e0a800;
+            color: #212529;
+        }
+        
         .fps-counter {
             font-size: 14px;
             color: #888;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; /* 等宽字体用于数字对齐 */
+        }
+        
+        .bot-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 8px 15px;
+            border-radius: 6px;
+            font-weight: bold;
+            font-size: 14px;
+            background-color: #333;
+            color: #888;
+        }
+        
+        .bot-status.running {
+            background-color: #d4edda;
+            color: #155724;
+        }
+        
+        .bot-status.paused {
+            background-color: #fff3cd;
+            color: #856404;
+        }
+        
+        .bot-status.stopped {
+            background-color: #f8d7da;
+            color: #721c24;
         }
         
         .alert-status {
@@ -192,7 +238,7 @@
         
         .scenario-description {
             font-size: 12px;
-            color: #888;
+            color: #999;
         }
         
         @media (max-width: 768px) {
@@ -223,8 +269,39 @@
             
             .controls {
                 display: flex;
-                flex-wrap: wrap;
-                gap: 5px;
+                flex-direction: column;
+                gap: 15px;
+                align-items: stretch;
+            }
+            
+            .controls .btn {
+                width: 100%;
+                margin: 0;
+                padding: 12px;
+                font-size: 16px;
+            }
+            
+            .controls .bot-controls {
+                display: flex;
+                gap: 10px;
+            }
+            
+            .controls .bot-controls .btn {
+                flex: 1;
+                width: auto;
+            }
+            
+            .status-info-mobile {
+                display: flex;
+                flex-direction: column;
+                gap: 8px;
+                margin-top: 15px;
+            }
+            
+            .status-info-mobile > div {
+                margin: 0 !important;
+                font-size: 14px;
+                text-align: center;
             }
             
             .debug-image, .route-image {
@@ -255,6 +332,11 @@
             <div id="connection-dot" class="status-dot"></div>
             <span id="connection-status">连接中...</span>
         </div>
+        <div class="bot-status" id="bot-status">
+            <span id="bot-status-icon">🤖</span>
+            <span id="bot-status-text">Bot: Unknown</span>
+            <span id="bot-state-text" style="margin-left: 10px; font-size: 12px; color: #888;">State: --</span>
+        </div>
         <div class="alert-status inactive" id="alert-status">
             <span id="alert-icon">🔇</span>
             <span id="alert-text">Alert: Disabled</span>
@@ -266,17 +348,15 @@
             <span id="quality-text" style="margin-left: 10px; color: #888;">质量: --</span>
         </div>
         <div class="controls">
-            <button id="refresh-btn" class="btn" onclick="location.reload()">刷新页面</button>
-            <button id="test-sound-btn" class="btn" onclick="testAudio()">测试音频</button>
-            <button id="toggle-opt-btn" class="btn" onclick="toggleOptimization()">切换优化模式</button>
-            <div id="audio-status" style="display: inline-block; margin-left: 10px; font-size: 12px; color: #888;">
-                🔇 音频未激活
+            <div class="bot-controls">
+                <button id="bot-stop-btn" class="btn btn-warning" onclick="stopBot()">⏹️ 停止Bot</button>
             </div>
-            <div id="optimization-status" style="display: inline-block; margin-left: 10px; font-size: 12px; color: #888;">
-                🚀 优化模式: --
-            </div>
-            <div id="device-status" style="display: inline-block; margin-left: 10px; font-size: 12px; color: #888;">
-                📱 设备: --
+            <button id="test-sound-btn" class="btn" onclick="testAudio()">🔊 测试音频</button>
+            <button id="toggle-opt-btn" class="btn" onclick="toggleOptimization()">🚀 切换优化模式</button>
+            <div class="status-info-mobile">
+                <div id="audio-status" style="color: #888;">🔇 音频未激活</div>
+                <div id="optimization-status" style="color: #888;">🚀 优化模式: --</div>
+                <div id="device-status" style="color: #888;">📱 设备: --</div>
             </div>
         </div>
     </div>
@@ -404,9 +484,16 @@
                 
                 const now = Date.now();
                 const serverTime = data.timestamp * 1000; // Convert to milliseconds
-                const latency = now - serverTime;
+                // 计算总延迟：包括服务端处理时间 + 网络传输时间 + WebSocket传输时间
+                const totalLatency = Math.round(now - serverTime); 
                 
-                debugInfo.textContent = `状态: 已更新 (${new Date().toLocaleTimeString()}) - 延迟: ${latency}ms`;
+                // 如果有服务端处理时间信息，计算网络延迟
+                let networkLatency = totalLatency;
+                if (data.performance && data.performance.frame_time_ms) {
+                    networkLatency = Math.max(0, totalLatency - Math.round(data.performance.frame_time_ms));
+                }
+                
+                debugInfo.textContent = `状态: 已更新 (${new Date().toLocaleTimeString()}) - 延迟: ${totalLatency}ms`;
                 
                 // 更新性能指标
                 frameCount++;
@@ -416,11 +503,13 @@
                     lastFpsTime = now;
                 }
                 fpsText.textContent = `FPS: ${fps}`;
-                latencyText.textContent = `延迟: ${latency}ms`;
+                // 显示网络延迟，更准确反映实际网络传输延迟
+                latencyText.textContent = `延迟: ${networkLatency.toString().padStart(3, ' ')}ms`; // 对齐到3位数
                 
                 // 显示编码时间和其他性能指标（如果可用）
                 if (data.performance && data.performance.encode_time_ms) {
-                    encodeText.textContent = `编码: ${data.performance.encode_time_ms}ms`;
+                    const encodeTime = Math.round(data.performance.encode_time_ms);
+                    encodeText.textContent = `编码: ${encodeTime.toString().padStart(2, ' ')}ms`;
                 }
                 
                 // 显示图像质量信息
@@ -428,10 +517,10 @@
                     qualityText.textContent = `质量: ${data.quality}%`;
                 }
                 
-                // 延迟警告
-                if (latency > 200) {
+                // 延迟警告 (基于网络延迟)
+                if (networkLatency > 100) {
                     latencyText.style.color = '#ff4444'; // 红色表示高延迟
-                } else if (latency > 100) {
+                } else if (networkLatency > 50) {
                     latencyText.style.color = '#ffaa00'; // 橙色表示中等延迟
                 } else {
                     latencyText.style.color = '#4CAF50'; // 绿色表示低延迟
@@ -460,6 +549,12 @@
                 alertIcon.textContent = '🔇';
                 alertText.textContent = 'Alert: Disabled';
             }
+        });
+        
+        // Bot状态实时更新 - WebSocket推送
+        socket.on('bot_status_update', function(data) {
+            console.log('Real-time bot status update:', data);
+            updateBotStatus(data.bot_status, data.bot_state);
         });
         
         // 声音命令处理
@@ -706,6 +801,120 @@
             }
         }
         
+        // Bot控制函数
+        let currentBotStatus = 'unknown';
+        
+        async function stopBot() {
+            const botStopBtn = document.getElementById('bot-stop-btn');
+            
+            // 禁用按钮，防止重复点击
+            botStopBtn.disabled = true;
+            
+            try {
+                const response = await fetch('/api/bot/stop', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    }
+                });
+                
+                const result = await response.json();
+                if (result.success) {
+                    console.log('Bot stopped successfully');
+                } else {
+                    console.error('Failed to stop bot:', result.error);
+                    alert('停止Bot失败: ' + result.error);
+                }
+                
+                // 立即更新状态
+                fetchServerStatus();
+                
+            } catch (error) {
+                console.error('Error stopping bot:', error);
+                alert('停止Bot时出错: ' + error.message);
+            } finally {
+                // 重新启用按钮
+                setTimeout(() => {
+                    botStopBtn.disabled = false;
+                }, 1000);
+            }
+        }
+        
+        // 更新Bot状态显示
+        function updateBotStatus(botStatus, botState) {
+            // 避免重复更新相同状态
+            if (currentBotStatus === botStatus && 
+                document.getElementById('bot-state-text') && 
+                document.getElementById('bot-state-text').textContent === `State: ${botState}`) {
+                return;
+            }
+            
+            currentBotStatus = botStatus;  // 更新全局状态
+            
+            const botStatusElement = document.getElementById('bot-status');
+            const botStatusText = document.getElementById('bot-status-text');
+            const botStateText = document.getElementById('bot-state-text');
+            const botStopBtn = document.getElementById('bot-stop-btn');
+            
+            // 清除所有状态类
+            if (botStatusElement) {
+                botStatusElement.className = 'bot-status';
+            }
+            
+            // 添加状态变化闪烁效果
+            if (botStatusElement) {
+                botStatusElement.style.transition = 'background-color 0.3s ease';
+                botStatusElement.style.backgroundColor = '#444';
+                setTimeout(() => {
+                    botStatusElement.style.backgroundColor = '';
+                }, 300);
+            }
+            
+            // 根据状态设置样式和按钮状态
+            switch (botStatus) {
+                case 'running':
+                    if (botStatusElement) {
+                        botStatusElement.classList.add('running');
+                        botStatusText.textContent = 'Bot: 运行中';
+                    }
+                    if (botStopBtn) {
+                        botStopBtn.disabled = false;
+                        botStopBtn.textContent = '⏹️ 停止Bot';
+                        botStopBtn.style.opacity = '1';
+                    }
+                    break;
+                case 'paused':
+                case 'stopped':
+                    if (botStatusElement) {
+                        botStatusElement.classList.add('paused');
+                        botStatusText.textContent = 'Bot: 已停止';
+                    }
+                    if (botStopBtn) {
+                        botStopBtn.disabled = true;
+                        botStopBtn.textContent = '⏹️ Bot已停止';
+                        botStopBtn.style.opacity = '0.6';
+                    }
+                    break;
+                default:
+                    if (botStatusElement) {
+                        botStatusText.textContent = 'Bot: 未知状态';
+                    }
+                    if (botStopBtn) {
+                        botStopBtn.disabled = true;
+                        botStopBtn.style.opacity = '0.6';
+                    }
+            }
+            
+            // 更新状态文本
+            if (botStateText) {
+                if (botState && botState !== 'unknown') {
+                    botStateText.textContent = `State: ${botState}`;
+                } else {
+                    botStateText.textContent = 'State: --';
+                }
+            }
+        }
+
         // 获取服务器状态
         async function fetchServerStatus() {
             try {
@@ -718,13 +927,18 @@
                     // 显示服务器端性能信息
                     console.log('Server performance:', status.performance);
                 }
+                
+                // 更新Bot状态
+                if (status.bot_status) {
+                    updateBotStatus(status.bot_status, status.bot_state);
+                }
             } catch (error) {
                 console.error('Error fetching server status:', error);
             }
         }
         
-        // 定期获取服务器状态
-        setInterval(fetchServerStatus, 5000);
+        // 定期获取服务器状态 - 更频繁检查bot状态变化
+        setInterval(fetchServerStatus, 2000); // 每2秒检查一次
         
         // 初始化时获取状态
         fetchServerStatus();

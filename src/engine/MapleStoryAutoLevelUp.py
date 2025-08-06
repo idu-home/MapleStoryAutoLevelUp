@@ -305,6 +305,7 @@ class MapleStoryAutoBot:
         self.thread_auto_bot.start()
         self.is_first_frame = True
 
+        self.is_terminated = False
         logger.info("[MapleStoryAutoBot] Started")
 
     def pause(self):

@@ -60,7 +60,7 @@ class AutoBotController(QObject):
         '''
         self.auto_bot.web_server = web_server
 
-        web_server.start()
+        web_server.start(self.auto_bot)
         logger.info(f"Web debug server started at {self.auto_bot.web_server.get_url()}")
 
     def toggle_enable(self):

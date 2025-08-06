@@ -24,6 +24,7 @@ class WebDebugServer:
     def __init__(self, host=DEFAULT_HOST, port=DEFAULT_PORT):
         self.host = host
         self.port = port
+        self.bot = None  # Will be set when server starts
         # Set template folder path
         template_dir = os.path.join(os.path.dirname(__file__), TEMPLATE_FOLDER)
         self.app = Flask(__name__, template_folder=template_dir)
@@ -79,17 +80,44 @@ class WebDebugServer:
             
         @self.app.route('/api/status')
         def status():
+            bot_status = 'unknown'
+            bot_state = 'unknown'
+            
+            if self.bot:
+                if hasattr(self.bot, 'is_terminated') and self.bot.is_terminated:
+                    bot_status = 'stopped'
+                elif hasattr(self.bot, 'thread_auto_bot') and self.bot.thread_auto_bot and self.bot.thread_auto_bot.is_alive():
+                    bot_status = 'running'
+                else:
+                    bot_status = 'paused'
+                    
+                # Get current FSM state if available
+                if hasattr(self.bot, 'fsm') and self.bot.fsm and hasattr(self.bot.fsm, 'state') and self.bot.fsm.state:
+                    bot_state = self.bot.fsm.state.name
+                    
+            # Build performance data safely
+            performance_data = {
+                'optimized_encoding': self.use_optimized_encoding
+            }
+            
+            try:
+                if hasattr(self, 'performance_monitor') and self.performance_monitor:
+                    performance_data.update({
+                        'avg_frame_time_ms': round(self.performance_monitor.get_avg_frame_time(), 2),
+                        'avg_encode_time_ms': round(self.performance_monitor.get_avg_encode_time(), 2),
+                        'estimated_fps': round(self.performance_monitor.get_fps(), 1),
+                    })
+            except Exception as e:
+                logger.warning(f"Error getting performance data: {e}")
+            
             return jsonify({
                 'status': 'running',
+                'bot_status': bot_status,
+                'bot_state': bot_state,
                 'has_debug_frame': self.latest_debug_frame is not None,
                 'has_route_frame': self.latest_route_frame is not None,
                 'alert_active': self.alert_status,
-                'performance': {
-                    'avg_frame_time_ms': round(self.performance_monitor.get_avg_frame_time(), 2),
-                    'avg_encode_time_ms': round(self.performance_monitor.get_avg_encode_time(), 2),
-                    'estimated_fps': round(self.performance_monitor.get_fps(), 1),
-                    'optimized_encoding': self.use_optimized_encoding
-                }
+                'performance': performance_data
             })
             
         @self.app.route('/api/trigger_alert', methods=['POST'])
@@ -164,6 +192,26 @@ class WebDebugServer:
             except Exception as e:
                 logger.error(f"Error toggling optimization: {e}")
                 return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/bot/stop', methods=['POST'])
+        def stop_bot():
+            """Stop the bot"""
+            try:
+                if not self.bot:
+                    return jsonify({'error': 'Bot instance not available'}), 400
+                
+                # Stop the bot
+                self.bot.pause()
+                logger.info("Bot stopped via web interface")
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'Bot stopped successfully'
+                })
+                
+            except Exception as e:
+                logger.error(f"Error stopping bot: {e}")
+                return jsonify({'error': str(e)}), 500
             
         @self.socketio.on('connect')
         def handle_connect():
@@ -219,6 +267,45 @@ class WebDebugServer:
                 logger.debug(f"Increasing quality to {self.current_quality}")
         
         return result
+        
+    def _setup_status_broadcast(self):
+        """Set up periodic bot status broadcasting via WebSocket"""
+        import threading
+        
+        def broadcast_status():
+            while self.is_running:
+                try:
+                    if self.bot:
+                        # Get bot status
+                        bot_status = 'unknown'
+                        bot_state = 'unknown'
+                        
+                        if hasattr(self.bot, 'is_terminated') and self.bot.is_terminated:
+                            bot_status = 'stopped'
+                        elif hasattr(self.bot, 'thread_auto_bot') and self.bot.thread_auto_bot and self.bot.thread_auto_bot.is_alive():
+                            bot_status = 'running'
+                        else:
+                            bot_status = 'paused'
+                            
+                        # Get current FSM state if available
+                        if hasattr(self.bot, 'fsm') and self.bot.fsm and hasattr(self.bot.fsm, 'state') and self.bot.fsm.state:
+                            bot_state = self.bot.fsm.state.name
+                        
+                        # Broadcast status update via WebSocket
+                        self.socketio.emit('bot_status_update', {
+                            'bot_status': bot_status,
+                            'bot_state': bot_state,
+                            'timestamp': time.time()
+                        })
+                    
+                    time.sleep(1)  # Check every 1 second
+                except Exception as e:
+                    logger.warning(f"Error in status broadcast: {e}")
+                    time.sleep(5)  # Wait longer on error
+        
+        # Start status broadcast thread
+        self.status_thread = threading.Thread(target=broadcast_status, daemon=True)
+        self.status_thread.start()
         
     def update_debug_frame(self, debug_frame, route_frame=None, alert_status=False, sound_command=None):
         """Update debug images and alert status"""
@@ -314,11 +401,17 @@ class WebDebugServer:
         self.performance_monitor.record_frame_time(frame_time)
         self.last_frame_time = frame_start_time
             
-    def start(self):
+    def start(self, bot):
         """Start Web server"""
         if self.is_running:
             logger.warning("Web server is already running")
             return
+        
+        # Set bot instance
+        self.bot = bot
+        
+        # Set up periodic status broadcast
+        self._setup_status_broadcast()
             
         def run_server():
             try:
