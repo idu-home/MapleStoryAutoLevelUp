@@ -14,27 +14,39 @@
             color: #ffffff;
         }
         
-        .header {
-            text-align: center;
-            margin-bottom: 20px;
-            padding: 10px;
-            background-color: #2a2a2a;
-            border-radius: 8px;
-        }
-        
-        .header h1 {
-            margin: 0;
-            color: #4CAF50;
-        }
         
         .status-bar {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 10px;
+            padding: 15px;
             background-color: #2a2a2a;
             border-radius: 8px;
             margin-bottom: 20px;
+        }
+        
+        .status-row {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            padding: 8px 0;
+            border-bottom: 1px solid #444;
+        }
+        
+        .status-row:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+        }
+        
+        .status-row-left {
+            display: flex;
+            align-items: center;
+            gap: 15px;
+            flex: 1;
+        }
+        
+        .status-row-right {
+            display: flex;
+            align-items: center;
+            gap: 10px;
         }
         
         .status-indicator {
@@ -66,6 +78,7 @@
             gap: 20px;
             flex-wrap: wrap;
             justify-content: center;
+            align-items: stretch;
         }
         
         .image-panel {
@@ -74,48 +87,69 @@
             padding: 15px;
             min-width: 400px;
             flex: 1;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            min-height: 500px;
         }
         
         .image-panel h3 {
             margin: 0 0 15px 0;
             color: #4CAF50;
             text-align: center;
+            font-size: 16px;
+            font-weight: bold;
+            border-bottom: 1px solid #444;
+            padding-bottom: 8px;
         }
         
         .image-wrapper {
             position: relative;
             text-align: center;
+            background-color: #1a1a1a;
+            border-radius: 6px;
+            padding: 10px;
+            border: 1px solid #444;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 350px;
         }
         
         .debug-image, .route-image {
             max-width: 100%;
-            height: auto;
+            max-height: 100%;
             border-radius: 4px;
-            border: 2px solid #444;
+            border: 1px solid #555;
+            object-fit: contain;
         }
         
         .no-image {
             display: flex;
             align-items: center;
             justify-content: center;
-            height: 300px;
+            width: 100%;
+            height: 100%;
             background-color: #333;
             border-radius: 4px;
             color: #888;
             font-style: italic;
+            border: 1px dashed #555;
         }
         
         .image-info {
             margin-top: 10px;
             font-size: 12px;
-            color: #888;
+            color: #aaa;
             text-align: center;
+            background-color: #2a2a2a;
+            padding: 8px 12px;
+            border-radius: 4px;
+            border: 1px solid #444;
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
         }
         
-        .controls {
-            text-align: center;
-            margin-top: 20px;
-        }
         
         .btn {
             background-color: #4CAF50;
@@ -158,7 +192,21 @@
         .fps-counter {
             font-size: 14px;
             color: #888;
-            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace; /* 等宽字体用于数字对齐 */
+            font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+            display: flex;
+            gap: 15px;
+        }
+        
+        .metric {
+            min-width: 80px;
+            text-align: left;
+        }
+        
+        .metric-number {
+            display: inline-block;
+            min-width: 40px;
+            text-align: right;
+            font-weight: bold;
         }
         
         .bot-status {
@@ -223,73 +271,69 @@
         
         @media (max-width: 768px) {
             body {
+                padding: 5px;
+            }
+            
+            .status-bar {
                 padding: 10px;
+            }
+            
+            .status-row {
+                flex-direction: column;
+                align-items: stretch;
+                gap: 10px;
+                margin-bottom: 15px;
+                padding: 10px 0;
+            }
+            
+            .status-row-left, .status-row-right {
+                width: 100%;
+            }
+            
+            .status-row-left {
+                flex-direction: column;
+                gap: 8px;
+            }
+            
+            .fps-counter {
+                display: grid;
+                grid-template-columns: 1fr 1fr;
+                gap: 8px;
+                font-size: 12px;
             }
             
             .image-container {
                 flex-direction: column;
+                gap: 15px;
             }
             
             .image-panel {
                 min-width: auto;
-                margin-bottom: 15px;
+                margin-bottom: 0;
+                min-height: auto;
             }
             
-            .status-bar {
-                flex-wrap: wrap;
-                gap: 10px;
+            .image-wrapper {
+                min-height: 250px;
             }
             
-            .fps-counter {
-                display: flex;
-                flex-wrap: wrap;
-                gap: 5px;
-                font-size: 11px;
-            }
-            
-            .controls {
-                display: flex;
-                flex-direction: column;
-                gap: 15px;
-                align-items: stretch;
-            }
-            
-            .controls .btn {
+            .btn {
                 width: 100%;
                 margin: 0;
                 padding: 12px;
-                font-size: 16px;
-            }
-            
-            .controls .bot-controls {
-                display: flex;
-                gap: 10px;
-            }
-            
-            .controls .bot-controls .btn {
-                flex: 1;
-                width: auto;
-            }
-            
-            .status-info-mobile {
-                display: flex;
-                flex-direction: column;
-                gap: 8px;
-                margin-top: 15px;
-            }
-            
-            .status-info-mobile > div {
-                margin: 0 !important;
                 font-size: 14px;
-                text-align: center;
             }
             
             .debug-image, .route-image {
-                max-width: 100%;
+                width: 100%;
                 height: auto;
-                /* Ensure high-quality scaling on mobile */
                 image-rendering: -webkit-optimize-contrast;
                 image-rendering: crisp-edges;
+            }
+            
+            .bot-status {
+                font-size: 12px;
+                padding: 6px 12px;
             }
         }
         
@@ -303,34 +347,44 @@
     </style>
 </head>
 <body>
-    <div class="header">
-        <h1>🎮 MapleStory Auto Bot Debug Viewer</h1>
-    </div>
     
     <div class="status-bar">
-        <div class="status-indicator">
-            <div id="connection-dot" class="status-dot"></div>
-            <span id="connection-status">连接中...</span>
-        </div>
-        <div class="bot-status" id="bot-status">
-            <span id="bot-status-icon">🤖</span>
-            <span id="bot-status-text">Bot: Unknown</span>
-            <span id="bot-state-text" style="margin-left: 10px; font-size: 12px; color: #888;">State: --</span>
-        </div>
-        <div class="fps-counter">
-            <span id="fps-text">FPS: --</span>
-            <span id="latency-text" style="margin-left: 10px; color: #888;">延迟: --ms</span>
-            <span id="encode-text" style="margin-left: 10px; color: #888;">编码: --ms</span>
-            <span id="quality-text" style="margin-left: 10px; color: #888;">质量: --</span>
-        </div>
-        <div class="controls">
-            <div class="bot-controls">
+        <!-- 第一行：连接状态 + Bot状态 + 控制按钮 -->
+        <div class="status-row">
+            <div class="status-row-left">
+                <div class="status-indicator">
+                    <div id="connection-dot" class="status-dot"></div>
+                    <span id="connection-status">连接中...</span>
+                </div>
+                <div class="bot-status" id="bot-status">
+                    <span id="bot-status-icon">🤖</span>
+                    <span id="bot-status-text">Bot: Unknown</span>
+                    <span id="bot-state-text" style="margin-left: 10px; font-size: 12px; color: #888;">State: --</span>
+                </div>
+            </div>
+            <div class="status-row-right">
                 <button id="bot-stop-btn" class="btn btn-warning" onclick="stopBot()">⏹️ 停止Bot</button>
             </div>
-            <button id="toggle-opt-btn" class="btn" onclick="toggleOptimization()">🚀 切换优化模式</button>
-            <div class="status-info-mobile">
+        </div>
+        
+        <!-- 第二行：优化模式信息 -->
+        <div class="status-row">
+            <div class="status-row-left">
                 <div id="optimization-status" style="color: #888;">🚀 优化模式: --</div>
                 <div id="device-status" style="color: #888;">📱 设备: --</div>
+            </div>
+            <div class="status-row-right">
+                <button id="toggle-opt-btn" class="btn" onclick="toggleOptimization()">🚀 切换优化模式</button>
+            </div>
+        </div>
+        
+        <!-- 第三行：性能数据 -->
+        <div class="status-row">
+            <div class="fps-counter">
+                <span id="fps-text" class="metric">FPS: <span class="metric-number">--</span></span>
+                <span id="latency-text" class="metric">延迟: <span class="metric-number">--</span>ms</span>
+                <span id="encode-text" class="metric">编码: <span class="metric-number">--</span>ms</span>
+                <span id="quality-text" class="metric">质量: <span class="metric-number">--</span></span>
             </div>
         </div>
     </div>
@@ -473,19 +527,19 @@
                     frameCount = 0;
                     lastFpsTime = now;
                 }
-                fpsText.textContent = `FPS: ${fps}`;
+                fpsText.querySelector('.metric-number').textContent = fps.toString().padStart(2, ' ');
                 // 显示网络延迟，更准确反映实际网络传输延迟
-                latencyText.textContent = `延迟: ${networkLatency.toString().padStart(3, ' ')}ms`; // 对齐到3位数
+                latencyText.querySelector('.metric-number').textContent = networkLatency.toString().padStart(3, ' ');
                 
                 // 显示编码时间和其他性能指标（如果可用）
                 if (data.performance && data.performance.encode_time_ms) {
                     const encodeTime = Math.round(data.performance.encode_time_ms);
-                    encodeText.textContent = `编码: ${encodeTime.toString().padStart(2, ' ')}ms`;
+                    encodeText.querySelector('.metric-number').textContent = encodeTime.toString().padStart(2, ' ');
                 }
                 
                 // 显示图像质量信息
                 if (data.quality) {
-                    qualityText.textContent = `质量: ${data.quality}%`;
+                    qualityText.querySelector('.metric-number').textContent = data.quality.toString().padStart(3, ' ');
                 }
                 
                 // 延迟警告 (基于网络延迟)
