@@ -11,6 +11,7 @@ import cv2
 # Local Import
 from src.utils.logger import logger
 from src.utils.common import get_bar_percent
+from src.utils.exp_tracker import exp_tracker
 from src.input.KeyBoardController import press_key
 
 class HealthMonitor:
@@ -68,7 +69,14 @@ class HealthMonitor:
         self.is_terminated = True
         if self.thread:
             self.thread.join()
-            logger.info("[Health Monitor] Terminated")
+            
+        # Save EXP tracking data
+        try:
+            exp_tracker.save_data()
+        except Exception as e:
+            logger.warning(f"Error saving EXP tracking data: {e}")
+            
+        logger.info("[Health Monitor] Terminated")
 
     def enable(self):
         '''
@@ -158,6 +166,11 @@ class HealthMonitor:
                     self.mp_percent = mp_percent
                 if exp_percent is not None:
                     self.exp_percent = exp_percent
+                    # Update EXP tracker
+                    try:
+                        exp_tracker.update_exp(exp_percent)
+                    except Exception as e:
+                        logger.warning(f"Error updating EXP tracker: {e}")
 
                 hp_thres = self.cfg["health_monitor"]["add_hp_percent"]
                 mp_thres = self.cfg["health_monitor"]["add_mp_percent"]

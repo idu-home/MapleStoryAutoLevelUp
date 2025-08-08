@@ -91,6 +91,16 @@ class WebDebugServer:
                 # Get current FSM state if available
                 if hasattr(self.bot, 'fsm') and self.bot.fsm and hasattr(self.bot.fsm, 'state') and self.bot.fsm.state:
                     bot_state = self.bot.fsm.state.name
+            
+            # Get HP/MP/EXP data if available
+            hp_percent = None
+            mp_percent = None
+            exp_percent = None
+            
+            if self.bot and hasattr(self.bot, 'health_monitor') and self.bot.health_monitor:
+                hp_percent = getattr(self.bot.health_monitor, 'hp_percent', None)
+                mp_percent = getattr(self.bot.health_monitor, 'mp_percent', None) 
+                exp_percent = getattr(self.bot.health_monitor, 'exp_percent', None)
                     
             # Build performance data safely
             performance_data = {
@@ -113,7 +123,12 @@ class WebDebugServer:
                 'bot_state': bot_state,
                 'has_debug_frame': self.latest_debug_frame is not None,
                 'has_route_frame': self.latest_route_frame is not None,
-                'performance': performance_data
+                'performance': performance_data,
+                'health_stats': {
+                    'hp_percent': hp_percent,
+                    'mp_percent': mp_percent,
+                    'exp_percent': exp_percent
+                }
             })
             
         
@@ -151,6 +166,165 @@ class WebDebugServer:
                 
             except Exception as e:
                 logger.error(f"Error stopping bot: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/exp/history')
+        def exp_history():
+            """Get EXP gain history data for charts"""
+            try:
+                from src.utils.exp_tracker import exp_tracker
+                
+                # Get hours parameter, default to 1 hour
+                hours_back = request.args.get('hours', default=1, type=int)
+                hours_back = max(1, min(24, hours_back))  # Limit between 1-24 hours
+                
+                # Get minute-by-minute data
+                data = exp_tracker.get_exp_per_minute_data(hours_back)
+                
+                # Get statistics
+                stats = exp_tracker.get_statistics(hours_back)
+                
+                return jsonify({
+                    'success': True,
+                    'data': data,
+                    'statistics': stats,
+                    'hours_back': hours_back
+                })
+                
+            except Exception as e:
+                logger.error(f"Error getting EXP history: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/exp/stats')
+        def exp_stats():
+            """Get EXP statistics for different time periods"""
+            try:
+                from src.utils.exp_tracker import exp_tracker
+                
+                # Get stats for different periods
+                stats_1h = exp_tracker.get_statistics(1)
+                stats_3h = exp_tracker.get_statistics(3) 
+                stats_6h = exp_tracker.get_statistics(6)
+                stats_24h = exp_tracker.get_statistics(24)
+                
+                current_exp = exp_tracker.get_current_exp()
+                
+                return jsonify({
+                    'success': True,
+                    'current_exp_percent': current_exp,
+                    'periods': {
+                        '1h': stats_1h,
+                        '3h': stats_3h,
+                        '6h': stats_6h,
+                        '24h': stats_24h
+                    }
+                })
+                
+            except Exception as e:
+                logger.error(f"Error getting EXP statistics: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/exp/reset', methods=['POST'])
+        def reset_exp_data():
+            """Reset EXP tracking data"""
+            try:
+                from src.utils.exp_tracker import exp_tracker
+                
+                exp_tracker.clear_data()
+                logger.info("EXP tracking data reset via web interface")
+                
+                return jsonify({
+                    'success': True,
+                    'message': 'EXP tracking data reset successfully'
+                })
+                
+            except Exception as e:
+                logger.error(f"Error resetting EXP data: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/exp/snapshots')
+        def exp_snapshots():
+            """Get raw snapshot data for debugging"""
+            try:
+                from src.utils.exp_tracker import exp_tracker
+                
+                hours_back = request.args.get('hours', default=1, type=int)
+                hours_back = max(1, min(24, hours_back))
+                
+                snapshots = exp_tracker.get_snapshots_raw(hours_back)
+                
+                return jsonify({
+                    'success': True,
+                    'snapshots': snapshots,
+                    'count': len(snapshots),
+                    'hours_back': hours_back
+                })
+                
+            except Exception as e:
+                logger.error(f"Error getting EXP snapshots: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/exp/debug')
+        def exp_debug():
+            """Debug EXP tracking system"""
+            try:
+                from src.utils.exp_tracker import exp_tracker
+                
+                with exp_tracker.data_lock:
+                    debug_info = {
+                        'current_exp_percent': exp_tracker.current_exp_percent,
+                        'last_snapshot_time': exp_tracker.last_snapshot_time,
+                        'last_update_time': exp_tracker.last_update_time,
+                        'snapshot_count': len(exp_tracker.snapshots),
+                        'recent_snapshots': [
+                            snapshot.to_dict() 
+                            for snapshot in list(exp_tracker.snapshots)[-5:]  # 最近5个
+                        ]
+                    }
+                
+                return jsonify({
+                    'success': True,
+                    'debug_info': debug_info,
+                    'timestamp': time.time()
+                })
+                
+            except Exception as e:
+                logger.error(f"Error getting EXP debug info: {e}")
+                return jsonify({'error': str(e)}), 500
+
+        @self.app.route('/api/exp/generate_test_data', methods=['POST'])
+        def generate_test_data():
+            """Generate test EXP data for debugging"""
+            try:
+                from src.utils.exp_tracker import exp_tracker
+                import random
+                
+                # Generate test snapshots
+                current_time = time.time()
+                base_exp = 10.0
+                
+                for i in range(10):  # Generate 10 test snapshots
+                    timestamp = current_time - (10 - i) * 60  # 每分钟一个快照
+                    exp_percent = base_exp + (i * random.uniform(0.5, 2.0))  # 模拟增长
+                    
+                    # Manually create snapshot (for testing)
+                    from src.utils.exp_tracker import ExpSnapshot
+                    snapshot = ExpSnapshot(timestamp, exp_percent)
+                    exp_tracker.snapshots.append(snapshot)
+                
+                exp_tracker.current_exp_percent = exp_percent
+                exp_tracker.last_snapshot_time = current_time
+                
+                logger.info(f"Generated {len(exp_tracker.snapshots)} test EXP snapshots")
+                
+                return jsonify({
+                    'success': True,
+                    'message': f'Generated {len(exp_tracker.snapshots)} test snapshots',
+                    'snapshots_count': len(exp_tracker.snapshots)
+                })
+                
+            except Exception as e:
+                logger.error(f"Error generating test data: {e}")
                 return jsonify({'error': str(e)}), 500
             
         @self.socketio.on('connect')
@@ -231,11 +405,40 @@ class WebDebugServer:
                         if hasattr(self.bot, 'fsm') and self.bot.fsm and hasattr(self.bot.fsm, 'state') and self.bot.fsm.state:
                             bot_state = self.bot.fsm.state.name
                         
+                        # Get HP/MP/EXP data
+                        hp_percent = None
+                        mp_percent = None
+                        exp_percent = None
+                        
+                        if hasattr(self.bot, 'health_monitor') and self.bot.health_monitor:
+                            hp_percent = getattr(self.bot.health_monitor, 'hp_percent', None)
+                            mp_percent = getattr(self.bot.health_monitor, 'mp_percent', None)
+                            exp_percent = getattr(self.bot.health_monitor, 'exp_percent', None)
+                        
+                        # Get EXP tracking info
+                        exp_debug_info = None
+                        try:
+                            from src.utils.exp_tracker import exp_tracker
+                            with exp_tracker.data_lock:
+                                exp_debug_info = {
+                                    'snapshot_count': len(exp_tracker.snapshots),
+                                    'last_snapshot_time': exp_tracker.last_snapshot_time,
+                                    'current_exp': exp_tracker.current_exp_percent
+                                }
+                        except Exception as e:
+                            logger.debug(f"Error getting EXP debug info for broadcast: {e}")
+                        
                         # Broadcast status update via WebSocket
                         self.socketio.emit('bot_status_update', {
                             'bot_status': bot_status,
                             'bot_state': bot_state,
-                            'timestamp': time.time()
+                            'timestamp': time.time(),
+                            'health_stats': {
+                                'hp_percent': hp_percent,
+                                'mp_percent': mp_percent,
+                                'exp_percent': exp_percent
+                            },
+                            'exp_debug_info': exp_debug_info
                         })
                     
                     time.sleep(1)  # Check every 1 second
