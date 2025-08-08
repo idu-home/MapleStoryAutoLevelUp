@@ -48,9 +48,6 @@ class WebDebugServer:
         self.latest_route_frame = None
         self.frame_lock = threading.Lock()
         
-        # Store alert status
-        self.alert_status = False
-        self.alert_lock = threading.Lock()
         
         # Performance monitoring
         self.performance_monitor = PerformanceMonitor()
@@ -116,66 +113,9 @@ class WebDebugServer:
                 'bot_state': bot_state,
                 'has_debug_frame': self.latest_debug_frame is not None,
                 'has_route_frame': self.latest_route_frame is not None,
-                'alert_active': self.alert_status,
                 'performance': performance_data
             })
             
-        @self.app.route('/api/trigger_alert', methods=['POST'])
-        def trigger_alert():
-            """Trigger alert event via API"""
-            try:
-                data = request.get_json()
-                if not data:
-                    return jsonify({'error': 'No JSON data provided'}), 400
-                
-                alert_type = data.get('type')
-                if not alert_type:
-                    return jsonify({'error': 'No alert type specified'}), 400
-                
-                # Map alert types to sound commands
-                sound_commands = {
-                    'rune_detected': 'start_rune_alert',
-                    'rune_solved': 'play_rune_solved_alert',
-                    'rune_stop': 'stop_rune_alert',
-                    'bot_stopped': 'play_bot_stopped_alert'
-                }
-                
-                if alert_type not in sound_commands:
-                    return jsonify({'error': f'Unknown alert type: {alert_type}'}), 400
-                
-                sound_command = sound_commands[alert_type]
-                
-                # Update alert status based on type
-                with self.alert_lock:
-                    if alert_type == 'rune_detected':
-                        self.alert_status = True
-                    elif alert_type == 'rune_solved' or alert_type == 'rune_stop':
-                        self.alert_status = False
-                
-                # Send sound command via WebSocket
-                self.socketio.emit('sound_command', {
-                    'command': sound_command,
-                    'timestamp': time.time()
-                })
-                
-                # Send alert status update
-                self.socketio.emit('alert_status_update', {
-                    'alert_active': self.alert_status,
-                    'timestamp': time.time()
-                })
-                
-                logger.info(f"Triggered alert: {alert_type} -> {sound_command}")
-                
-                return jsonify({
-                    'success': True,
-                    'alert_type': alert_type,
-                    'sound_command': sound_command,
-                    'alert_active': self.alert_status
-                })
-                
-            except Exception as e:
-                logger.error(f"Error triggering alert: {e}")
-                return jsonify({'error': str(e)}), 500
         
         @self.app.route('/api/toggle_optimization', methods=['POST'])
         def toggle_optimization():
@@ -307,8 +247,8 @@ class WebDebugServer:
         self.status_thread = threading.Thread(target=broadcast_status, daemon=True)
         self.status_thread.start()
         
-    def update_debug_frame(self, debug_frame, route_frame=None, alert_status=False, sound_command=None):
-        """Update debug images and alert status"""
+    def update_debug_frame(self, debug_frame, route_frame=None):
+        """Update debug images"""
         # Check if server is running
         if not self.is_running:
             logger.debug("[WebDebugServer] Server not running, skipping frame update")
@@ -350,9 +290,6 @@ class WebDebugServer:
             self.latest_debug_frame = debug_frame.copy() if debug_valid else None
             self.latest_route_frame = route_frame.copy() if route_valid else None
         
-        with self.alert_lock:
-            self.alert_status = alert_status
-            
         # Send updates via WebSocket only if there are connected clients
         try:
             # Send debug frame update
@@ -380,18 +317,7 @@ class WebDebugServer:
                         'timestamp': frame_start_time
                     })
             
-            # Send alert status update
-            self.socketio.emit('alert_status_update', {
-                'alert_active': self.alert_status,
-                'timestamp': frame_start_time
-            })
             
-            # Send sound command if provided
-            if sound_command:
-                self.socketio.emit('sound_command', {
-                    'command': sound_command,
-                    'timestamp': frame_start_time
-                })
                 
         except Exception as e:
             logger.warning(f"Failed to emit websocket updates: {e}")

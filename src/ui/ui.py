@@ -536,19 +536,8 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.button_record)
         button_layout.addLayout(layout_bot_mode)
 
-        # Alert Status Section
-        alert_layout = QHBoxLayout()
-        alert_layout.setSpacing(8)
-        alert_layout.setAlignment(Qt.AlignLeft)
-        
-        self.label_alert_status = QLabel("🔇 Alert: Disabled")
-        self.label_alert_status.setStyleSheet("color: gray;")
-        
-        alert_layout.addWidget(self.label_alert_status)
-        
         layout.addLayout(button_layout)
         layout.addLayout(load_config_layout)
-        layout.addLayout(alert_layout)
 
         gbox.setLayout(layout)
         return gbox
@@ -983,16 +972,6 @@ class MainWindow(QMainWindow):
 
         self.route_map_canvas.setPixmap(scaled_pixmap)
 
-    def update_alert_status(self, is_alert_active):
-        '''
-        Update alert status display
-        '''
-        if is_alert_active:
-            self.label_alert_status.setText("🔊 Alert: Active")
-            self.label_alert_status.setStyleSheet("color: red; font-weight: bold;")
-        else:
-            self.label_alert_status.setText("🔇 Alert: Disabled")
-            self.label_alert_status.setStyleSheet("color: gray;")
 
     def update_advance_setting_ui_from_cfg(self):
         '''

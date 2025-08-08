@@ -1,34 +1,36 @@
 '''
 Alert system for MapleStory Auto Bot
-Handles sound alerts for various events like rune detection
+Handles push notifications for various events like rune detection
 '''
 # Standard import
-import os
-import time
 import threading
 import logging
-from pathlib import Path
+import requests
+from datetime import datetime
+import sys
+import os
 
-# Library import
+# Handle imports for both direct execution and module import
+if __name__ == '__main__':
+    # Direct execution: add parent directory to path
+    sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../..'))
+
 try:
-    import pygame
-    PYGAME_AVAILABLE = True
+    from src.utils.logger import logger
 except ImportError:
-    PYGAME_AVAILABLE = False
-    logging.warning("pygame not available, sound alerts will be disabled")
+    # Fallback to basic logging if logger module not available
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
 
-try:
-    import winsound
-    WINSOUND_AVAILABLE = True
-except ImportError:
-    WINSOUND_AVAILABLE = False
-
-# Local import
-from src.utils.logger import logger
+# Default ntfy configuration
+DEFAULT_NTFY_SERVER = 'https://ntfy.sh'
+DEFAULT_NTFY_TOPIC = 'weiwei-maple-bot'
+DEFAULT_NTFY_PRIORITY = 'default'
+DEFAULT_NTFY_TAGS = 'maple_story,bot'
 
 class Alert:
     '''
-    Manages sound alerts for the bot
+    Manages push notifications for the bot
     '''
     def __init__(self, cfg):
         self.cfg = cfg
@@ -36,115 +38,93 @@ class Alert:
         self.rune_alert_thread = None
         self.alert_lock = threading.Lock()
         
-        # Initialize sound system
-        self._init_sound_system()
+        # Initialize ntfy system
+        self._init_ntfy_system()
         
-        # Load alert sounds
-        self._load_alert_sounds()
+    def _init_ntfy_system(self):
+        '''Initialize the ntfy notification system'''
+        self.alert_enabled = self.cfg.get('alert', {}).get('enable', False)
+        self.ntfy_enabled = self.alert_enabled
         
-    def _init_sound_system(self):
-        '''Initialize the sound system based on available libraries'''
-        if PYGAME_AVAILABLE:
-            try:
-                pygame.mixer.init(frequency=22050, size=-16, channels=2, buffer=512)
-                self.sound_system = "pygame"
-                logger.info("Sound system initialized with pygame")
-            except Exception as e:
-                logger.warning(f"Failed to initialize pygame mixer: {e}")
-                self.sound_system = None
-        elif WINSOUND_AVAILABLE:
-            self.sound_system = "winsound"
-            logger.info("Sound system initialized with winsound")
+        if self.ntfy_enabled:
+            # Hardcoded ntfy settings
+            self.ntfy_server = DEFAULT_NTFY_SERVER
+            self.ntfy_topic = DEFAULT_NTFY_TOPIC
+            self.ntfy_priority = DEFAULT_NTFY_PRIORITY
+            self.ntfy_tags = DEFAULT_NTFY_TAGS
+            logger.info(f"ntfy notification system initialized - Topic: {self.ntfy_topic}")
         else:
-            self.sound_system = None
-            logger.warning("No sound system available, alerts will be silent")
+            logger.info("ntfy notifications disabled")
     
-    def _load_alert_sounds(self):
-        '''Load alert sound files'''
-        self.alert_sounds = {}
-        
-        if not self.sound_system:
+    def _send_ntfy_notification(self, title, message, priority=None, tags=None):
+        '''Send a notification via ntfy.sh'''
+        if not self.ntfy_enabled:
             return
             
-        # Define sound file paths
-        sound_files = {
-            'rune_detected': 'media/rune_alert.wav',
-            'rune_solved': 'media/rune_solved.wav',
-            'bot_stopped': 'media/bot_stopped.wav'
-        }
-        
-        for alert_type, file_path in sound_files.items():
-            if os.path.exists(file_path):
-                if self.sound_system == "pygame":
-                    try:
-                        self.alert_sounds[alert_type] = pygame.mixer.Sound(file_path)
-                        logger.info(f"Loaded sound: {file_path}")
-                    except Exception as e:
-                        logger.warning(f"Failed to load sound {file_path}: {e}")
-                else:
-                    self.alert_sounds[alert_type] = file_path
+        try:
+            ntfy_url = f"{self.ntfy_server}/{self.ntfy_topic}"
+            
+            # Remove emojis from title for headers (HTTP headers have encoding limitations)
+            clean_title = title.encode('ascii', 'ignore').decode('ascii').strip() if title else ''
+            
+            headers = {
+                'Title': clean_title,
+                'Priority': priority or self.ntfy_priority,
+                'Tags': tags or self.ntfy_tags
+            }
+            
+            # Include original title with emojis in the message body
+            full_message = f"{title}\n{message}" if title != clean_title else message
+            
+            response = requests.post(
+                ntfy_url, 
+                data=full_message.encode('utf-8'), 
+                headers=headers,
+                timeout=5
+            )
+            
+            if response.status_code == 200:
+                logger.info(f"ntfy notification sent: {title}")
+                return True
             else:
-                logger.warning(f"Sound file not found: {file_path}")
-    
-    def play_sound(self, alert_type, repeat=False):
-        '''
-        Play a sound alert
-        
-        Args:
-            alert_type (str): Type of alert ('rune_detected', 'rune_solved', 'bot_stopped')
-            repeat (bool): Whether to repeat the sound
-        '''
-        if not self.sound_system or alert_type not in self.alert_sounds:
-            return
-            
-        try:
-            if self.sound_system == "pygame":
-                sound = self.alert_sounds[alert_type]
-                if repeat:
-                    sound.play(-1)  # -1 means loop indefinitely
-                else:
-                    sound.play()
-            elif self.sound_system == "winsound":
-                sound_file = self.alert_sounds[alert_type]
-                if repeat:
-                    # For winsound, we need to implement looping manually
-                    def play_loop():
-                        while True:
-                            winsound.PlaySound(sound_file, winsound.SND_FILENAME)
-                            time.sleep(0.1)  # Small delay between loops
-                    
-                    thread = threading.Thread(target=play_loop, daemon=True)
-                    thread.start()
-                else:
-                    winsound.PlaySound(sound_file, winsound.SND_FILENAME)
-                    
-            logger.info(f"Playing {alert_type} alert")
-            
+                logger.error(f"ntfy notification failed: {response.status_code}")
+                return False
+                
         except Exception as e:
-            logger.error(f"Failed to play sound {alert_type}: {e}")
-    
-    def stop_sound(self, alert_type):
-        '''Stop a specific sound alert'''
-        if not self.sound_system or alert_type not in self.alert_sounds:
-            return
-            
-        try:
-            if self.sound_system == "pygame":
-                sound = self.alert_sounds[alert_type]
-                sound.stop()
-            # For winsound, stopping is handled by the thread termination
-            
-            logger.info(f"Stopped {alert_type} alert")
-            
-        except Exception as e:
-            logger.error(f"Failed to stop sound {alert_type}: {e}")
+            logger.error(f"Failed to send ntfy notification: {e}")
+            return False
     
     def start_rune_alert(self):
         '''Start the rune detection alert'''
         with self.alert_lock:
-            if not self.is_rune_alert_active:
+            if not self.is_rune_alert_active and self.alert_enabled:
                 self.is_rune_alert_active = True
-                self.play_sound('rune_detected', repeat=True)
+                
+                # Send immediate notification
+                self._send_ntfy_notification(
+                    title="🔮 Rune Detected!",
+                    message=f"A rune has been detected at {datetime.now().strftime('%H:%M:%S')}. The bot is now solving it.",
+                    priority="high",
+                    tags="rune,alert,urgent"
+                )
+                
+                # Start periodic notifications for persistent rune alert
+                def periodic_alert():
+                    count = 1
+                    while self.is_rune_alert_active:
+                        import time
+                        time.sleep(10)  # Wait 10 seconds between notifications
+                        if self.is_rune_alert_active:
+                            count += 1
+                            self._send_ntfy_notification(
+                                title="🔮 Rune Still Active",
+                                message=f"Rune solving in progress... ({count * 10}s elapsed)",
+                                priority="default"
+                            )
+                
+                self.rune_alert_thread = threading.Thread(target=periodic_alert, daemon=True)
+                self.rune_alert_thread.start()
+                
                 logger.info("Started rune detection alert")
     
     def stop_rune_alert(self):
@@ -152,27 +132,234 @@ class Alert:
         with self.alert_lock:
             if self.is_rune_alert_active:
                 self.is_rune_alert_active = False
-                self.stop_sound('rune_detected')
                 logger.info("Stopped rune detection alert")
     
     def play_rune_solved_alert(self):
-        '''Play rune solved alert'''
-        self.play_sound('rune_solved', repeat=False)
+        '''Send rune solved notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="✅ Rune Solved!",
+                message=f"Rune successfully solved at {datetime.now().strftime('%H:%M:%S')}. Bot continuing normal operation.",
+                priority="default",
+                tags="rune,success"
+            )
     
     def play_bot_stopped_alert(self):
-        '''Play bot stopped alert'''
-        self.play_sound('bot_stopped', repeat=False)
+        '''Send bot stopped notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="⛔ Bot Stopped",
+                message=f"MapleStory bot has stopped at {datetime.now().strftime('%H:%M:%S')}. Please check the application.",
+                priority="urgent",
+                tags="bot,stopped,urgent"
+            )
+    
+    def play_bot_started_alert(self):
+        '''Send bot started notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="🚀 Bot Started",
+                message=f"MapleStory bot has started at {datetime.now().strftime('%H:%M:%S')}. Beginning auto-leveling session.",
+                priority="default",
+                tags="bot,started"
+            )
+    
+    def play_bot_paused_alert(self):
+        '''Send bot paused notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="⏸️ Bot Paused",
+                message=f"MapleStory bot has been paused at {datetime.now().strftime('%H:%M:%S')}. Waiting for resume command.",
+                priority="default",
+                tags="bot,paused"
+            )
+    
+    def send_player_stuck_alert(self, stuck_duration):
+        '''Send player stuck notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="⚠️ Player Stuck",
+                message=f"Player has been stuck for {stuck_duration:.1f} seconds. Bot is attempting recovery actions.",
+                priority="high",
+                tags="player,stuck,warning"
+            )
+    
+    def send_rune_activated_alert(self):
+        '''Send rune mini-game activated notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="🎯 Rune Activated!",
+                message="Rune mini-game has started. Bot is now solving the arrows.",
+                priority="high",
+                tags="rune,minigame,progress"
+            )
+    
+    def send_rune_located_alert(self):
+        '''Send rune located notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="📍 Rune Located!",
+                message="Rune found on screen. Bot is moving to interact with it.",
+                priority="default",
+                tags="rune,found,progress"
+            )
+    
+    def send_rune_search_warning_alert(self, elapsed_time, remaining_time):
+        '''Send rune search taking long warning'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="🔍 Rune Search Taking Long",
+                message=f"Still searching for rune after {elapsed_time:.1f}s. {remaining_time:.1f}s remaining before timeout.",
+                priority="default",
+                tags="rune,search,warning"
+            )
+    
+    def send_rune_search_timeout_alert(self, elapsed_time):
+        '''Send rune search timeout notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="⏰ Rune Search Timeout",
+                message=f"Could not locate rune after {elapsed_time:.1f} seconds. Returning to normal hunting...",
+                priority="high",
+                tags="rune,timeout,failure"
+            )
+    
+    def send_rune_warning_detected_alert(self):
+        '''Send rune warning message detected notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="⚠️ Rune Warning Detected",
+                message="Game is showing 'Please solve rune before hunting' message. Bot has stopped attacking and is focusing on rune.",
+                priority="high",
+                tags="rune,warning,game_message"
+            )
+    
+    def send_rune_interaction_start_alert(self):
+        '''Send rune interaction started notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="🔧 Interacting with Rune",
+                message="Bot is now attempting to trigger the rune. Getting into position...",
+                priority="default",
+                tags="rune,interaction,progress"
+            )
+    
+    def send_rune_interaction_timeout_alert(self, elapsed_time):
+        '''Send rune interaction timeout notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="⏰ Rune Interaction Timeout",
+                message=f"Failed to activate rune after {elapsed_time:.1f} seconds. Returning to search mode...",
+                priority="high",
+                tags="rune,timeout,warning"
+            )
+    
+    def send_rune_interaction_warning_alert(self, remaining_time):
+        '''Send rune interaction taking long warning'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="⚠️ Rune Interaction Taking Long",
+                message=f"Still trying to activate rune. {remaining_time:.1f}s remaining before timeout.",
+                priority="default",
+                tags="rune,warning,progress"
+            )
+    
+    def send_rune_interaction_attempts_alert(self, attempts):
+        '''Send multiple rune interaction attempts notification'''
+        if False:  # Debug alerts disabled by default
+            self._send_ntfy_notification(
+                title="🔄 Multiple Rune Attempts",
+                message=f"Made {attempts} attempts to activate rune. Still trying...",
+                priority="low",
+                tags="rune,attempts,debug"
+            )
     
     def is_rune_alert_playing(self):
-        '''Check if rune alert is currently playing'''
+        '''Check if rune alert is currently active'''
         with self.alert_lock:
             return self.is_rune_alert_active
+    
+    def is_alert_enabled(self):
+        '''Check if alert system is enabled'''
+        return self.alert_enabled
     
     def cleanup(self):
         '''Clean up resources'''
         self.stop_rune_alert()
-        if self.sound_system == "pygame":
-            try:
-                pygame.mixer.quit()
-            except:
-                pass 
+        
+
+
+def main():
+    '''
+    Test function for Alert system
+    Usage: python -m src.engine.Alert
+    '''
+    import time
+    
+    print("🧪 Testing ntfy Alert System")
+    print("=" * 50)
+    
+    # Create minimal test configuration
+    test_cfg = {
+        'alert': {
+            'enable': True
+        }
+    }
+    
+    print(f"📱 ntfy server: {DEFAULT_NTFY_SERVER}")
+    print(f"📢 ntfy topic: {DEFAULT_NTFY_TOPIC}")
+    print(f"🏷️  ntfy tags: {DEFAULT_NTFY_TAGS}")
+    print()
+    
+    # Initialize Alert system
+    try:
+        alert = Alert(test_cfg)
+        print("✅ Alert system initialized successfully")
+    except Exception as e:
+        print(f"❌ Failed to initialize Alert system: {e}")
+        return
+    
+    # Test different alert types
+    test_cases = [
+        ("Bot Started", alert.play_bot_started_alert),
+        ("Bot Paused", alert.play_bot_paused_alert),
+        ("Bot Stopped", alert.play_bot_stopped_alert),
+        ("Player Stuck", lambda: alert.send_player_stuck_alert(15.3)),
+        ("Rune Solved", alert.play_rune_solved_alert),
+        ("Rune Detection Start", alert.start_rune_alert),
+        ("Rune Activated", alert.send_rune_activated_alert),
+        ("Rune Located", alert.send_rune_located_alert),
+        ("Rune Warning Detected", alert.send_rune_warning_detected_alert),
+        ("Rune Interaction Start", alert.send_rune_interaction_start_alert),
+    ]
+    
+    for description, method in test_cases:
+        print(f"\n🔔 Testing: {description}")
+        try:
+            method()
+            print("✅ Notification sent successfully")
+            
+            if description == "Rune Detection Start":
+                print("⏳ Rune alert active for 5 seconds...")
+                time.sleep(5)
+                alert.stop_rune_alert()
+                print("🛑 Rune alert stopped")
+                
+        except Exception as e:
+            print(f"❌ Failed to send notification: {e}")
+        
+        time.sleep(1)  # Small delay between tests
+    
+    
+    # Cleanup
+    alert.cleanup()
+    print("✅ Alert system cleaned up")
+    
+    print("\n" + "=" * 50)
+    print("🏁 Test completed! Check your ntfy app/web interface for notifications.")
+    print(f"📱 Subscribe to topic: {DEFAULT_NTFY_TOPIC}")
+    print(f"🌐 Web interface: {DEFAULT_NTFY_SERVER}/{DEFAULT_NTFY_TOPIC}")
+
+
+if __name__ == '__main__':
+    main() 

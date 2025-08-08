@@ -140,14 +140,13 @@ class MapleStoryAutoBot:
         self.fsm.add_transition("solving_rune", "hunting") # After rune solving
         self.fsm.set_init_state("hunting")
 
-    def update_signals(self, image_debug_signal, route_map_viz_signal, alert_status_signal=None):
+    def update_signals(self, image_debug_signal, route_map_viz_signal):
         '''
         Update signal from UI framework.
         For debug window viz
         '''
         self.image_debug_signal = image_debug_signal
         self.route_map_viz_signal = route_map_viz_signal
-        self.alert_status_signal = alert_status_signal
 
     def load_config(self, cfg):
         '''
@@ -307,11 +306,19 @@ class MapleStoryAutoBot:
 
         self.is_terminated = False
         logger.info("[MapleStoryAutoBot] Started")
+        
+        # Send bot started notification
+        if self.alert:
+            self.alert.play_bot_started_alert()
 
     def pause(self):
         '''
         Terminate thread except main thread
         '''
+        # Send bot paused notification
+        if self.alert:
+            self.alert.play_bot_paused_alert()
+            
         self.terminate_threads()
 
     def enable_viz(self):
@@ -1109,6 +1116,11 @@ class MapleStoryAutoBot:
             self.loc_watch_dog = self.loc_player_global
             self.t_watch_dog = current_time
             logger.warning(f"[is_player_stuck] Player stuck for {round(dt, 2)} seconds.")
+            
+            # Send stuck alert notification
+            if self.alert:
+                self.alert.send_player_stuck_alert(dt)
+                
             return True
         return False
 
@@ -1901,10 +1913,6 @@ class MapleStoryAutoBot:
                     self.image_debug_signal.emit(img_frame_debug_emit)
                     self.route_map_viz_signal.emit(img_route_debug_emit)
 
-                # Update alert status
-                if self.is_ui and self.alert_status_signal is not None:
-                    is_alert_active = self.alert.is_rune_alert_playing()
-                    self.alert_status_signal.emit(is_alert_active)
 
             else:
                 pass
@@ -1931,10 +1939,7 @@ class MapleStoryAutoBot:
         # Use processed route debug frame
         route_frame = self.img_route_debug.copy() if self.img_route_debug is not None else None
         
-        # Get alert status
-        alert_status = self.alert.is_rune_alert_playing() if self.alert else False
-        
-        self.web_server.update_debug_frame(debug_frame, route_frame, alert_status)
+        self.web_server.update_debug_frame(debug_frame, route_frame)
 
 def main(args):
     '''

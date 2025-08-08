@@ -335,14 +335,6 @@ profiler:
   print_frequency: 30 # Print profiler result for every 30 frames
 
 alert:
-  # 🔊 Alert System
-  # Sound alerts for various events
-  enable: True                    # ✅ Enable sound alerts
-  rune_detection_alert: True      # 🔊 Play sound when rune is detected
-  rune_solved_alert: True         # 🔊 Play sound when rune is solved
-  bot_stopped_alert: True         # 🔊 Play sound when bot is stopped
-  volume: 0.7                     # 🔊 Volume level [0.0 ~ 1.0]
-  sound_files:
-    rune_detected: "media/rune_alert.wav"    # 🔊 Sound file for rune detection
-    rune_solved: "media/rune_solved.wav"     # 🔊 Sound file for rune solved
-    bot_stopped: "media/bot_stopped.wav"     # 🔊 Sound file for bot stopped
+  # 📱 Alert System
+  # Push notifications for various events via ntfy.sh
+  enable: True                    # ✅ Enable alerts

@@ -14,7 +14,9 @@
       "Bash(mkdir:*)",
       "Bash(pip install:*)",
       "Bash(python:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(chmod:*)",
+      "Bash(grep:*)"
     ],
     "deny": []
   }
