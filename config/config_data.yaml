@@ -23,6 +23,7 @@ eng_to_cn:
   black_mountain: 烏山深處
   disposed_flower_garden: 暗影花園
   mu_Lung_wild_bear_area_2: 野熊的領土2
+  golem_temple_2: 石頭人寺庙2
   # monster
   zombie_lupin: 天使猴
   black_axe_stump: 黑斧木妖
@@ -52,6 +53,7 @@ eng_to_cn:
   moon_bunny: 月妙
   nependeath: 食人花
   dark_nependeath: 黑食人花
+  stone_golem: 石頭人
 
 # Register mobs in each maps
 map_mobs_mapping:
@@ -77,3 +79,4 @@ map_mobs_mapping:
   black_mountain: [hodori, moon_bunny, black_axe_stump]
   disposed_flower_garden: [nependeath, dark_nependeath]
   mu_Lung_wild_bear_area_2: [grizzly, panda]
+  golem_temple_2: [stone_golem]
