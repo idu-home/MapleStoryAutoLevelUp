@@ -84,7 +84,6 @@ class ExpTracker:
             
             # Debug: print every update (but limit frequency)
             if not hasattr(self, '_last_debug_time') or current_time - self._last_debug_time > 10:
-                print(f"[ExpTracker] Current EXP: {exp_percent:.1f}%, Snapshots: {len(self.snapshots)}")
                 self._last_debug_time = current_time
             
             # Check if it's time for a new snapshot

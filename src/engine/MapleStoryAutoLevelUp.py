@@ -71,6 +71,7 @@ class MapleStoryAutoBot:
         self.is_in_sustained_attack_mode = False  # Track if sustained attack is active
         self.sustained_attack_direction = "none"  # Current attack direction for sustained attack
         self.t_sustained_attack_start = 0.0  # When sustained attack started
+        self.route_cmd_backup = "none"  # Backup of route movement command before sustained attack
         # Signals (for UI)
         self.image_debug_signal = None
         self.route_map_viz_signal = None
@@ -1352,7 +1353,8 @@ class MapleStoryAutoBot:
                 self.img_frame[self.cfg["ui_coords"]["ui_y_start"]:, :][y:y+h, x:x+w]
 
         # Print command on screen
-        cv2.putText(self.img_frame_debug, f"Cmd: {self.cmd_move_x} {self.cmd_move_y} {self.cmd_action}",
+        sustained_info = f" | Sustained: {self.sustained_attack_direction}" if self.is_in_sustained_attack_mode else ""
+        cv2.putText(self.img_frame_debug, f"Cmd: {self.cmd_move_x} {self.cmd_move_y} {self.cmd_action}{sustained_info}",
                     (10, 430), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 255), 2)
 
     def update_img_frame_debug(self):
@@ -1797,6 +1799,8 @@ class MapleStoryAutoBot:
                 self.cmd_action = "attack_stop"
                 self.is_in_sustained_attack_mode = False
                 self.sustained_attack_direction = "none"  # Reset attack direction
+                # Restore original route command
+                self.cmd_move_x = self.route_cmd_backup
             return
 
         # Update attack command
@@ -1816,6 +1820,8 @@ class MapleStoryAutoBot:
                     self.cmd_action = "attack_stop"
                     self.is_in_sustained_attack_mode = False
                     self.sustained_attack_direction = "none"
+                    # Restore original route command
+                    self.cmd_move_x = self.route_cmd_backup
                 return
                 
             # Determine attack direction
@@ -1830,6 +1836,8 @@ class MapleStoryAutoBot:
                         self.t_last_attack = time.time()
                         self.t_sustained_attack_start = time.time()
                         self.sustained_attack_direction = attack_direction
+                        # Backup original route command before overriding
+                        self.route_cmd_backup = self.cmd_move_x
                         # Set initial turn direction
                         self.cmd_move_x = attack_direction
                     else:
