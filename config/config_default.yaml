@@ -46,6 +46,7 @@ directional_attack:
   range_y: 70                # ↕️ Vertical attack range (in pixels)
   cooldown: 0.9              # ⏱️ Time between attacks (in seconds)
   character_turn_delay: 0.02 # 🔄 Delay after turning before attacking (in seconds)
+  sustained_attack: true     # 🔄 Enable sustained attack when monsters are in range
 
 aoe_skill:
   # 💥 AoE Skill

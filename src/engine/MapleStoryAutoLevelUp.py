@@ -68,6 +68,9 @@ class MapleStoryAutoBot:
         self.cmd_move_x = "none" # "left" "right"
         self.cmd_move_y = "none" # "up" "down"
         self.cmd_action = "none" # "jump" "attack" ....
+        self.is_in_sustained_attack_mode = False  # Track if sustained attack is active
+        self.sustained_attack_direction = "none"  # Current attack direction for sustained attack
+        self.t_sustained_attack_start = 0.0  # When sustained attack started
         # Signals (for UI)
         self.image_debug_signal = None
         self.route_map_viz_signal = None
@@ -1628,8 +1631,22 @@ class MapleStoryAutoBot:
         # Get monsters in the search box
         self.monsters = self.get_monsters_in_range((x0, y0), (x1, y1))
 
+        # Check sustained attack mode
+        attack_config = None
+        if self.cfg["bot"]["attack"] == "aoe_skill":
+            attack_config = self.cfg["aoe_skill"]
+        elif self.cfg["bot"]["attack"] == "directional":
+            attack_config = self.cfg["directional_attack"]
+
+        use_sustained_attack = attack_config and attack_config.get("sustained_attack", False)
+
         # Check if no mob to attack
         if len(self.monsters) == 0:
+            # No monsters found - stop sustained attack if it was active
+            if self.is_in_sustained_attack_mode and use_sustained_attack:
+                self.cmd_action = "attack_stop"
+                self.is_in_sustained_attack_mode = False
+                self.sustained_attack_direction = "none"  # Reset attack direction
             return
 
         # Update attack command
@@ -1644,12 +1661,36 @@ class MapleStoryAutoBot:
             monster_right = self.get_nearest_monster(is_left = False)
             # Determine attack direction
             attack_direction = self.get_attack_direction(monster_left, monster_right)
-            # Attack Command
-            if time.time() - self.t_last_attack > cooldown and attack_direction is not None:
-                self.cmd_action = "attack"
-                self.t_last_attack = time.time()
-                # Set up attack direction
-                self.cmd_move_x = attack_direction
+            
+            if attack_direction is not None:
+                if use_sustained_attack:
+                    # Sustained attack mode for directional
+                    if not self.is_in_sustained_attack_mode:
+                        self.cmd_action = "attack_start"
+                        self.is_in_sustained_attack_mode = True
+                        self.t_last_attack = time.time()
+                        self.t_sustained_attack_start = time.time()
+                        self.sustained_attack_direction = attack_direction
+                        # Set initial turn direction
+                        self.cmd_move_x = attack_direction
+                    else:
+                        # Already in sustained attack - update direction if needed
+                        if self.sustained_attack_direction != attack_direction:
+                            self.sustained_attack_direction = attack_direction
+                            self.t_sustained_attack_start = time.time()  # Reset timer for new direction
+                        
+                        # Brief turn at start, then stop moving
+                        if time.time() - self.t_sustained_attack_start < 0.15:  # 150ms turn
+                            self.cmd_move_x = attack_direction
+                        else:
+                            self.cmd_move_x = "none"  # Stop moving after brief turn
+                else:
+                    # Traditional single attack mode for directional
+                    if time.time() - self.t_last_attack > cooldown:
+                        self.cmd_action = "attack"
+                        self.t_last_attack = time.time()
+                        # Set up attack direction
+                        self.cmd_move_x = attack_direction
 
     def update_cmd_by_random(self):
         '''

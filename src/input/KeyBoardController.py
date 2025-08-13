@@ -88,6 +88,7 @@ class KeyBoardController():
         self.is_enable = True
         self.is_need_force_heal = False
         self.is_terminated = False
+        self.is_attack_key_down = False      # Track if attack key is currently pressed
         # Parameters
         self.debounce_interval = self.cfg["system"]["key_debounce_interval"]
         self.fps_limit = self.cfg["system"]["fps_limit_keyboard_controller"]
@@ -169,7 +170,7 @@ class KeyBoardController():
                 if not active_window:
                     return False
                 return self.window_title in active_window.title
-            except Exception as e:
+            except Exception:
                 return False
 
     def release_all_key(self):
@@ -182,6 +183,8 @@ class KeyBoardController():
         key_up("down")
         # Also release attack keys to stop any ongoing attacks
         key_up(self.attack_key)
+        # Reset attack key state
+        self.is_attack_key_down = False
 
     def limit_fps(self):
         '''
@@ -276,6 +279,18 @@ class KeyBoardController():
             elif self.cmd_action == "attack":
                 press_key(self.attack_key)
                 self.t_last_skill = time.time()
+            elif self.cmd_action == "attack_start":
+                # Start sustained attack - press and hold attack key
+                key_down(self.attack_key)
+                self.is_attack_key_down = True
+                self.t_last_skill = time.time()
+                self.cmd_action = "none"  # Reset command to avoid repeated triggering
+            elif self.cmd_action == "attack_stop":
+                # Stop sustained attack - release attack key
+                if self.is_attack_key_down:
+                    key_up(self.attack_key)
+                    self.is_attack_key_down = False
+                self.cmd_action = "none"  # Reset command
             elif self.cmd_action == "add_hp":
                 press_key(self.cfg["key"]["add_hp"])
                 self.cmd_action = "none"  # Reset command
