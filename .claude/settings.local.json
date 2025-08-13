@@ -16,7 +16,8 @@
       "Bash(python:*)",
       "Bash(find:*)",
       "Bash(chmod:*)",
-      "Bash(grep:*)"
+      "Bash(grep:*)",
+      "Bash(mv:*)"
     ],
     "deny": []
   }

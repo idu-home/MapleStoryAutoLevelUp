@@ -27,7 +27,8 @@ class WebDebugServer:
         self.bot = None  # Will be set when server starts
         # Set template folder path
         template_dir = os.path.join(os.path.dirname(__file__), TEMPLATE_FOLDER)
-        self.app = Flask(__name__, template_folder=template_dir)
+        # Set static folder to the same as template folder for CSS/JS files
+        self.app = Flask(__name__, template_folder=template_dir, static_folder=template_dir, static_url_path='/static')
         
         # Add static file serving for media files
         media_dir = os.path.join(os.path.dirname(__file__), '..', '..', 'media')
@@ -39,6 +40,12 @@ class WebDebugServer:
             logger.info(f"Media files served from: {media_dir}")
         else:
             logger.warning(f"Media directory not found: {media_dir}")
+        
+        # Add explicit static file serving for templates directory
+        @self.app.route('/static/<path:filename>')
+        def serve_static(filename):
+            return send_from_directory(template_dir, filename)
+        logger.info(f"Static files served from: {template_dir}")
         self.socketio = SocketIO(self.app, cors_allowed_origins=CORS_ALLOWED_ORIGINS)
         self.server_thread = None
         self.is_running = False
@@ -73,7 +80,7 @@ class WebDebugServer:
     def _setup_routes(self):
         @self.app.route('/')
         def index():
-            return render_template('debug_viewer.html')
+            return render_template('index.html')
             
         @self.app.route('/api/status')
         def status():

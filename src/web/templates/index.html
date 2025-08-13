@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MapleStory Auto Bot Debug Viewer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/3.9.1/chart.min.js"></script>
+    <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+    
+    <div class="status-bar">
+        <!-- 第一行：连接状态 + Bot状态 + 控制按钮 -->
+        <div class="status-row">
+            <div class="status-row-left">
+                <div class="status-indicator">
+                    <div id="connection-dot" class="status-dot"></div>
+                    <span id="connection-status">连接中...</span>
+                </div>
+                <div class="bot-status" id="bot-status">
+                    <span id="bot-status-icon">🤖</span>
+                    <span id="bot-status-text">Bot: Unknown</span>
+                    <span id="bot-state-text" style="margin-left: 10px; font-size: 12px; color: #888;">State: --</span>
+                </div>
+            </div>
+            <div class="status-row-right">
+                <button id="bot-stop-btn" class="btn btn-warning" onclick="stopBot()">⏹️ 停止Bot</button>
+            </div>
+        </div>
+        
+        <!-- 第二行：优化模式信息 -->
+        <div class="status-row">
+            <div class="status-row-left">
+                <div id="optimization-status" style="color: #888;">🚀 优化模式: --</div>
+                <div id="device-status" style="color: #888;">📱 设备: --</div>
+            </div>
+            <div class="status-row-right">
+                <button id="toggle-opt-btn" class="btn" onclick="toggleOptimization()">🚀 切换优化模式</button>
+            </div>
+        </div>
+        
+        <!-- 第三行：角色状态数据 -->
+        <div class="status-row">
+            <div class="status-row-left">
+                <div style="color: #888; font-size: 14px; font-weight: bold;">角色状态:</div>
+                <div class="fps-counter">
+                    <span id="hp-text" class="metric">HP: <span class="metric-number" style="color: #ff4444;">--</span>%</span>
+                    <span id="mp-text" class="metric">MP: <span class="metric-number" style="color: #4444ff;">--</span>%</span>
+                    <span id="exp-text" class="metric">EXP: <span class="metric-number" style="color: #ffaa00;">--</span>%</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 第四行：性能数据 -->
+        <div class="status-row">
+            <div class="fps-counter">
+                <span id="fps-text" class="metric">FPS: <span class="metric-number">--</span></span>
+                <span id="latency-text" class="metric">延迟: <span class="metric-number">--</span>ms</span>
+                <span id="encode-text" class="metric">编码: <span class="metric-number">--</span>ms</span>
+                <span id="quality-text" class="metric">质量: <span class="metric-number">--</span></span>
+            </div>
+        </div>
+    </div>
+    
+    <div class="scenario-info" id="scenario-info" style="display: none;">
+        <div class="scenario-title" id="scenario-title">Normal Hunting</div>
+        <div class="scenario-message" id="scenario-message">No rune detected</div>
+        <div class="scenario-description" id="scenario-description">Testing rune alert scenarios</div>
+    </div>
+    
+    <!-- EXP 统计面板 -->
+    <div class="status-bar" style="margin-bottom: 20px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+            <h3 style="margin: 0; color: #ffaa00; font-size: 18px;">📈 经验值复合统计 (快照值 + 拟合增量)</h3>
+            <div style="display: flex; gap: 10px;">
+                <button id="exp-chart-1h" class="btn" onclick="changeExpTimeRange(1)" style="background-color: #ffaa00;">1小时</button>
+                <button id="exp-chart-3h" class="btn" onclick="changeExpTimeRange(3)">3小时</button>
+                <button id="exp-chart-6h" class="btn" onclick="changeExpTimeRange(6)">6小时</button>
+                <button class="btn" onclick="resetExpData()" style="background-color: #ff4444;">重置数据</button>
+                <button class="btn" onclick="debugExpData()" style="background-color: #888;">调试信息</button>
+                <button class="btn" onclick="generateTestData()" style="background-color: #0066cc;">生成测试数据</button>
+            </div>
+        </div>
+        
+        <!-- 统计数据概要 -->
+        <div class="fps-counter" style="margin-bottom: 15px;">
+            <span id="exp-total-text" class="metric">总获取: <span class="metric-number" style="color: #4CAF50;">--</span>%</span>
+            <span id="exp-avg-text" class="metric">平均/分: <span class="metric-number" style="color: #ffaa00;">--</span>%</span>
+            <span id="exp-max-text" class="metric">最高/分: <span class="metric-number" style="color: #ff4444;">--</span>%</span>
+            <span id="exp-level-ups" class="metric">升级: <span class="metric-number" style="color: #FFD700;">--</span>次</span>
+            <span id="exp-efficiency-text" class="metric">效率: <span class="metric-number" style="color: #4CAF50;">--</span>%</span>
+        </div>
+        
+        <!-- 实时EXP追踪状态 -->
+        <div class="fps-counter" style="margin-bottom: 15px; padding: 8px; background-color: #333; border-radius: 4px;">
+            <span id="exp-debug-snapshots" class="metric">快照数: <span class="metric-number" style="color: #888;">--</span></span>
+            <span id="exp-debug-current" class="metric">当前EXP: <span class="metric-number" style="color: #ffaa00;">--</span>%</span>
+            <span id="exp-debug-last-time" class="metric">上次快照: <span class="metric-number" style="color: #888;">--</span></span>
+        </div>
+        
+        <!-- 图表说明 -->
+        <div style="margin-bottom: 10px; padding: 8px; background-color: #333; border-radius: 4px; font-size: 12px; color: #aaa;">
+            <div style="display: flex; gap: 20px; align-items: center;">
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <div style="width: 12px; height: 2px; background-color: #4CAF50;"></div>
+                    <span>左轴：EXP快照值(%)，自适应缩放</span>
+                </div>
+                <div style="display: flex; align-items: center; gap: 5px;">
+                    <div style="width: 12px; height: 8px; background-color: rgba(255, 170, 0, 0.7);"></div>
+                    <span>右轴：拟合增量(%/分钟)，平滑分布</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 图表容器 -->
+        <div style="background-color: #1a1a1a; border-radius: 8px; padding: 15px; height: 300px;">
+            <canvas id="exp-chart" width="400" height="200"></canvas>
+        </div>
+    </div>
+    
+    <div class="image-container">
+        <div class="image-panel">
+            <h3>🎯 游戏窗口调试视图</h3>
+            <div class="image-wrapper">
+                <div id="debug-placeholder" class="no-image">
+                    等待调试图像...
+                </div>
+                <img id="debug-image" class="debug-image" style="display: none;" alt="Debug Frame">
+            </div>
+            <div class="image-info" id="debug-info">
+                状态: 未连接
+            </div>
+        </div>
+        
+        <div class="image-panel">
+            <h3>🗺️ 路线地图视图</h3>
+            <div class="image-wrapper">
+                <div id="route-placeholder" class="no-image">
+                    等待路线图像...
+                </div>
+                <img id="route-image" class="route-image" style="display: none;" alt="Route Frame">
+            </div>
+            <div class="image-info" id="route-info">
+                状态: 未连接
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Debug: Check if external files are loaded
+        console.log('Checking external files...');
+        
+        // Check if socket.io is loaded
+        if (typeof io === 'undefined') {
+            console.error('Socket.IO library not loaded!');
+        } else {
+            console.log('Socket.IO library loaded successfully');
+        }
+        
+        // Check if Chart.js is loaded
+        if (typeof Chart === 'undefined') {
+            console.error('Chart.js library not loaded!');
+        } else {
+            console.log('Chart.js library loaded successfully');
+        }
+    </script>
+    <script src="/static/script.js"></script>
+</body>
+</html> 
