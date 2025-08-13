@@ -713,6 +713,51 @@ class MapleStoryAutoBot:
 
         return (x0, y0, x1, y1)
 
+    def filter_monsters_in_attack_range(self, monsters):
+        '''
+        Filter monsters that are within attack range from a list of detected monsters
+        '''
+        if self.cfg["bot"]["attack"] == "aoe_skill":
+            x0_attack, y0_attack, x1_attack, y1_attack = self.get_attack_range()
+        elif self.cfg["bot"]["attack"] == "directional":
+            # For directional attacks, we need to check both sides
+            # Return monsters that are in either left or right attack range
+            x0_left, y0_left, x1_left, y1_left = self.get_attack_range(is_left=True)
+            x0_right, y0_right, x1_right, y1_right = self.get_attack_range(is_left=False)
+            
+            monsters_in_attack_range = []
+            for monster in monsters:
+                mx, my = monster["position"]
+                mw, mh = monster["size"]
+                
+                # Check overlap with left attack range
+                left_overlap = (mx < x1_left and mx + mw > x0_left and 
+                               my < y1_left and my + mh > y0_left)
+                
+                # Check overlap with right attack range  
+                right_overlap = (mx < x1_right and mx + mw > x0_right and
+                                my < y1_right and my + mh > y0_right)
+                
+                if left_overlap or right_overlap:
+                    monsters_in_attack_range.append(monster)
+            
+            return monsters_in_attack_range
+        else:
+            raise RuntimeError(f"Unsupported attack mode: {self.cfg['bot']['attack']}")
+            
+        # For AoE skills - simple box overlap check
+        monsters_in_attack_range = []
+        for monster in monsters:
+            mx, my = monster["position"] 
+            mw, mh = monster["size"]
+            
+            # Check if monster overlaps with attack range
+            if (mx < x1_attack and mx + mw > x0_attack and
+                my < y1_attack and my + mh > y0_attack):
+                monsters_in_attack_range.append(monster)
+                
+        return monsters_in_attack_range
+
     def get_nearest_monster(self, is_left=True):
         '''
         Finds the nearest monster within the player's attack range.
@@ -1423,6 +1468,108 @@ class MapleStoryAutoBot:
         self.is_terminated = True
         logger.info(f"[terminate_threads] Terminated all threads")
 
+    def get_monsters_in_forward_direction(self, forward_direction):
+        '''
+        Filter monsters to only include those in the forward direction
+        based on the route movement command.
+        
+        Args:
+            forward_direction (str): "left" or "right" indicating route direction
+        
+        Returns:
+            list: Monsters in the forward direction
+        '''
+        if not self.monsters or forward_direction not in ["left", "right"]:
+            return []
+        
+        forward_monsters = []
+        player_x = self.loc_player[0]
+        
+        for monster in self.monsters:
+            mx, my = monster["position"]
+            mw, mh = monster["size"]
+            monster_center_x = mx + mw // 2
+            
+            # Check if monster is in forward direction
+            if forward_direction == "left" and monster_center_x < player_x:
+                forward_monsters.append(monster)
+            elif forward_direction == "right" and monster_center_x > player_x:
+                forward_monsters.append(monster)
+        
+        return forward_monsters
+
+    def get_nearest_monster_from_list(self, monsters_list, is_left):
+        '''
+        Get the nearest monster from a given list of monsters
+        
+        Args:
+            monsters_list (list): List of monster dictionaries
+            is_left (bool): True to find monsters on the left, False for right
+            
+        Returns:
+            dict or None: Nearest monster in the specified direction from the list
+        '''
+        if not monsters_list:
+            return None
+            
+        nearest_monster = None
+        min_dist = float('inf')
+        
+        for monster in monsters_list:
+            mx, my = monster["position"]
+            mw, mh = monster["size"]
+            monster_center_x = mx + mw // 2
+            monster_center_y = my + mh // 2
+            
+            # Check direction
+            if is_left and monster_center_x >= self.loc_player[0]:
+                continue  # Skip monsters on right when looking for left
+            if not is_left and monster_center_x <= self.loc_player[0]:
+                continue  # Skip monsters on left when looking for right
+            
+            # Calculate distance
+            dist = abs(monster_center_x - self.loc_player[0]) + \
+                   abs(monster_center_y - self.loc_player[1])
+            
+            if dist < min_dist:
+                min_dist = dist
+                nearest_monster = monster
+                
+        return nearest_monster
+
+    def _get_monsters_for_attack(self, use_sustained_attack):
+        '''
+        Get monsters for attack considering sustained attack mode and direction filtering
+        
+        Args:
+            use_sustained_attack (bool): Whether sustained attack mode is enabled
+            
+        Returns:
+            tuple: (monster_left, monster_right) - nearest monsters on each side
+        '''
+        if not use_sustained_attack:
+            # Traditional mode - use all monsters
+            return (self.get_nearest_monster(is_left=True), 
+                    self.get_nearest_monster(is_left=False))
+        
+        # Sustained attack mode - check forward direction filtering
+        route_direction = self.cmd_move_x if hasattr(self, 'cmd_move_x') else "none"
+        
+        if route_direction in ["left", "right"]:
+            # Use forward monsters for sustained attack
+            forward_monsters = self.get_monsters_in_forward_direction(route_direction)
+            if len(forward_monsters) > 0:
+                # Filter nearest monsters from forward direction only
+                return (self.get_nearest_monster_from_list(forward_monsters, is_left=True),
+                        self.get_nearest_monster_from_list(forward_monsters, is_left=False))
+            else:
+                # No monsters in forward direction
+                return (None, None)
+        else:
+            # No clear forward direction, use all monsters
+            return (self.get_nearest_monster(is_left=True), 
+                    self.get_nearest_monster(is_left=False))
+
     def get_attack_direction(self, monster_left, monster_right):
         '''
         get_attack_direction
@@ -1640,9 +1787,12 @@ class MapleStoryAutoBot:
 
         use_sustained_attack = attack_config and attack_config.get("sustained_attack", False)
 
-        # Check if no mob to attack
-        if len(self.monsters) == 0:
-            # No monsters found - stop sustained attack if it was active
+        # Filter monsters that are actually in attack range (for decision making)
+        monsters_in_attack_range = self.filter_monsters_in_attack_range(self.monsters)
+
+        # Check if no mob in attack range (key change: use attack range for decision)
+        if len(monsters_in_attack_range) == 0:
+            # No monsters in attack range - stop sustained attack if it was active
             if self.is_in_sustained_attack_mode and use_sustained_attack:
                 self.cmd_action = "attack_stop"
                 self.is_in_sustained_attack_mode = False
@@ -1656,9 +1806,18 @@ class MapleStoryAutoBot:
                 self.t_last_attack = time.time()
 
         elif self.cfg["bot"]["attack"] == "directional":
-            # Get nearest monster to player
-            monster_left  = self.get_nearest_monster(is_left = True)
-            monster_right = self.get_nearest_monster(is_left = False)
+            # Get monsters for attack - filter by direction for sustained attack mode
+            monster_left, monster_right = self._get_monsters_for_attack(use_sustained_attack)
+
+            # For sustained attack mode with forward direction filtering
+            if use_sustained_attack and monster_left is None and monster_right is None:
+                # No monsters in attack range (or forward direction) - stop sustained attack if active
+                if self.is_in_sustained_attack_mode:
+                    self.cmd_action = "attack_stop"
+                    self.is_in_sustained_attack_mode = False
+                    self.sustained_attack_direction = "none"
+                return
+                
             # Determine attack direction
             attack_direction = self.get_attack_direction(monster_left, monster_right)
             
@@ -1691,6 +1850,7 @@ class MapleStoryAutoBot:
                         self.t_last_attack = time.time()
                         # Set up attack direction
                         self.cmd_move_x = attack_direction
+
 
     def update_cmd_by_random(self):
         '''
