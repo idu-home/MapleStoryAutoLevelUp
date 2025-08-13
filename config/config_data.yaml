@@ -3,6 +3,7 @@ eng_to_cn:
   # map
   ant_cave_2: 螞蟻洞2
   cloud_balcony: 雲彩露臺
+  cloud_balcony_5: 雲彩露臺5
   dragon_territory: 魔龍領地
   empty_house: 空屋
   fire_land_1: 火焰之地1
@@ -23,7 +24,9 @@ eng_to_cn:
   black_mountain: 烏山深處
   disposed_flower_garden: 暗影花園
   mu_Lung_wild_bear_area_2: 野熊的領土2
+  golem_temple_1: 石頭人寺庙1
   golem_temple_2: 石頭人寺庙2
+  qinglong: 青龍
   # monster
   zombie_lupin: 天使猴
   black_axe_stump: 黑斧木妖
@@ -59,6 +62,7 @@ eng_to_cn:
 map_mobs_mapping:
   ant_cave_2: [spike_mushroom, zombie_mushroom]
   cloud_balcony: [pink_windup_bear, brown_windup_bear]
+  cloud_balcony_5: [toy_trojan]
   dragon_territory: [wild_kargo]
   empty_house: [mushroom]
   fire_land_1: [black_axe_stump, fire_boar]
@@ -79,4 +83,6 @@ map_mobs_mapping:
   black_mountain: [hodori, moon_bunny, black_axe_stump]
   disposed_flower_garden: [nependeath, dark_nependeath]
   mu_Lung_wild_bear_area_2: [grizzly, panda]
+  golem_temple_1: [stone_golem]
   golem_temple_2: [stone_golem]
+  qinglong: [drake]

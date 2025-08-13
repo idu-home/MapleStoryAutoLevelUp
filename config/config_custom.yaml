@@ -1,5 +1,5 @@
 bot:
-  map: cloud_balcony
+  map: cloud_balcony_5
 directional_attack:
   range_x: 120
   range_y: 80
@@ -9,5 +9,9 @@ health_monitor:
 key:
   directional_attack: f
   return_home: "\u2196"
+nametag:
+  mode: histogram_eq
 system:
   fps_limit_main: 15
+watchdog:
+  timeout: 15
