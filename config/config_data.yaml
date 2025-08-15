@@ -27,6 +27,7 @@ eng_to_cn:
   golem_temple_1: 石頭人寺庙1
   golem_temple_2: 石頭人寺庙2
   qinglong: 青龍
+  mu_lung_practice_field_beginner: 武陵初级训练场
   # monster
   zombie_lupin: 天使猴
   black_axe_stump: 黑斧木妖
@@ -57,6 +58,7 @@ eng_to_cn:
   nependeath: 食人花
   dark_nependeath: 黑食人花
   stone_golem: 石頭人
+  straw_target_dummy: 训练用稻草人
 
 # Register mobs in each maps
 map_mobs_mapping:
@@ -86,3 +88,4 @@ map_mobs_mapping:
   golem_temple_1: [stone_golem]
   golem_temple_2: [stone_golem]
   qinglong: [drake]
+  mu_lung_practice_field_beginner: [straw_target_dummy]

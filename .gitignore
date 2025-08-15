@@ -14,3 +14,4 @@ test/
 *.spec
 venv/
 .idea/
+exp_tracking_snapshots.json
