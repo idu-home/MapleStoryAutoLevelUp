@@ -36,6 +36,9 @@ class Alert:
         self.cfg = cfg
         self.is_rune_alert_active = False
         self.rune_alert_thread = None
+        self.is_other_player_alert_active = False
+        self.other_player_alert_thread = None
+        self.other_player_first_detected_time = None
         self.alert_lock = threading.Lock()
         
         # Initialize ntfy system
@@ -134,6 +137,70 @@ class Alert:
                 self.is_rune_alert_active = False
                 logger.info("Stopped rune detection alert")
     
+    def update_other_player_status(self, player_count):
+        '''Update other player status and handle alerts'''
+        import time
+        
+        with self.alert_lock:
+            if player_count > 0:
+                # Other player detected
+                if self.other_player_first_detected_time is None:
+                    # First detection
+                    self.other_player_first_detected_time = time.time()
+                    self._start_other_player_alert()
+            else:
+                # No other player detected
+                if self.other_player_first_detected_time is not None:
+                    # Player disappeared
+                    self.other_player_first_detected_time = None
+                    self._stop_other_player_alert()
+    
+    def _start_other_player_alert(self):
+        '''Internal method to start the other player detection alert'''
+        if not self.is_other_player_alert_active and self.alert_enabled:
+            self.is_other_player_alert_active = True
+            
+            # Send immediate notification
+            self._send_ntfy_notification(
+                title="👤 Other Player Detected!",
+                message=f"Another player has been detected on the map at {datetime.now().strftime('%H:%M:%S')}. Monitoring for 10+ seconds...",
+                priority="default",
+                tags="other_player,alert"
+            )
+            
+            # Start periodic notifications after 10 seconds
+            def periodic_alert():
+                import time
+                time.sleep(10)  # Wait 10 seconds before first notification
+                count = 1
+                while self.is_other_player_alert_active:
+                    if self.is_other_player_alert_active:
+                        self._send_ntfy_notification(
+                            title="👤 Other Player Still Present",
+                            message=f"Other player has been on the map for {(count * 10) + 10} seconds. Consider changing channels.",
+                            priority="default",
+                            tags="other_player,persistent"
+                        )
+                        count += 1
+                    time.sleep(10)  # Wait 10 seconds between notifications
+            
+            self.other_player_alert_thread = threading.Thread(target=periodic_alert, daemon=True)
+            self.other_player_alert_thread.start()
+            
+            logger.info("Started other player detection alert")
+    
+    def _stop_other_player_alert(self):
+        '''Internal method to stop the other player detection alert'''
+        if self.is_other_player_alert_active:
+            self.is_other_player_alert_active = False
+            logger.info("Stopped other player detection alert")
+    
+    def stop_other_player_alert(self):
+        '''Public method to stop the other player detection alert'''
+        with self.alert_lock:
+            self.other_player_first_detected_time = None
+            self._stop_other_player_alert()
+    
     def play_rune_solved_alert(self):
         '''Send rune solved notification'''
         if self.alert_enabled:
@@ -153,6 +220,8 @@ class Alert:
                 priority="urgent",
                 tags="bot,stopped,urgent"
             )
+        # Stop other player alert when bot is stopped
+        self.stop_other_player_alert()
     
     def play_bot_started_alert(self):
         '''Send bot started notification'''
@@ -173,6 +242,8 @@ class Alert:
                 priority="default",
                 tags="bot,paused"
             )
+        # Stop other player alert when bot is paused
+        self.stop_other_player_alert()
     
     def send_player_stuck_alert(self, stuck_duration):
         '''Send player stuck notification'''
@@ -286,6 +357,7 @@ class Alert:
     def cleanup(self):
         '''Clean up resources'''
         self.stop_rune_alert()
+        self.stop_other_player_alert()
         
 
 
@@ -331,6 +403,8 @@ def main():
         ("Rune Located", alert.send_rune_located_alert),
         ("Rune Warning Detected", alert.send_rune_warning_detected_alert),
         ("Rune Interaction Start", alert.send_rune_interaction_start_alert),
+        ("Other Player Detection", lambda: alert.update_other_player_status(1)),
+        ("Other Player Disappears", lambda: alert.update_other_player_status(0)),
     ]
     
     for description, method in test_cases:

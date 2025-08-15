@@ -1989,6 +1989,10 @@ class MapleStoryAutoBot:
         loc_other_players = get_all_other_player_locations_on_minimap(
                                 self.img_minimap,
                                 self.cfg['minimap']['other_player_color'])
+        
+        # Handle other player alert notifications
+        self.alert.update_other_player_status(len(loc_other_players))
+
         # Debug
         # if self.is_first_frame:
         #     logger.info("Running minimap color analysis...")
