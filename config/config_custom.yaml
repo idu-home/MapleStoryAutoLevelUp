@@ -1,5 +1,5 @@
 bot:
-  map: mu_lung_practice_field_beginner
+  map: dragon_territory
 directional_attack:
   range_x: 120
   range_y: 80
