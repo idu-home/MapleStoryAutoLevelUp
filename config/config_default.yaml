@@ -6,6 +6,7 @@
 bot:
   # 🔁 Bot Settings
   mode: "normal"        # Options: "normal" "aux" "patrol"
+  debug_mode: false     # 🐛 Enable debug mode - bot will analyze but not send keyboard commands
   attack: "directional" # Options: "aoe_skill" "directional"
   map: "" # Please refer to config/config_data.yaml
 

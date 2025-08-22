@@ -11,8 +11,10 @@ class FindingRuneState(State):
         self.is_attack = True
 
     def on_enter(self):
-        self.bot.rune_solver.reset()
         self.disable_attack()
+        self.bot.kb.set_command("none none none") # prevent kb thread intervention
+        self.bot.kb.release_all_key()
+        self.bot.rune_solver.reset()
 
         if self.bot.alert:
             self.bot.alert.start_rune_alert()
@@ -55,6 +57,10 @@ class FindingRuneState(State):
         # If player stuck for too long, perform a random command
         if self.bot.is_player_stuck():
             self.bot.update_cmd_by_random()
+
+        # Check if debug mode is enabled - if so, don't send keyboard commands
+        if self.bot.cfg["bot"].get("debug_mode", False):
+            return
 
         # send command to keyboard controller
         self.bot.kb.set_command(self.bot.cmd_move_x + ' ' + \

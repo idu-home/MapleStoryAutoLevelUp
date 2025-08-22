@@ -673,7 +673,7 @@ class MapleStoryAutoBot:
 
         if nearest_up_down is not None:
             cv2.putText(
-                self.img_frame_debug, f"Route Vertical Action: {nearest_up_down['command']}",
+                self.img_frame_debug, f"Route Vertical: {nearest_up_down['command']}",
                 (650, 60),
                 cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255),
                 2, cv2.LINE_AA

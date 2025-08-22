@@ -46,6 +46,10 @@ class HuntingState(State):
             self.bot.update_cmd_by_random()
         self.bot.profiler.mark("Hunting - Stuck Check")
 
+        # Check if debug mode is enabled - if so, don't send keyboard commands
+        if self.bot.cfg["bot"].get("debug_mode", False):
+            return 
+
         # send command to keyboard controller
         self.bot.kb.set_command(self.bot.cmd_move_x + ' ' + \
                                 self.bot.cmd_move_y + ' ' + \

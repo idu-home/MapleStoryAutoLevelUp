@@ -54,6 +54,10 @@ class PatrolState(State):
         if self.bot.is_player_stuck():
             self.bot.update_cmd_by_random()
 
+        # Check if debug mode is enabled - if so, don't send keyboard commands
+        if self.bot.cfg["bot"].get("debug_mode", False):
+            return
+
         # send command to keyboard controller
         self.bot.kb.set_command(self.bot.cmd_move_x + ' ' + \
                                 self.bot.cmd_move_y + ' ' + \

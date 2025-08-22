@@ -55,6 +55,10 @@ class NearRuneState(State):
         # Check if reach goal on route map
         self.bot.check_reach_goal()
 
+        # Check if debug mode is enabled - if so, don't send keyboard commands
+        if self.bot.cfg["bot"].get("debug_mode", False):
+            return
+
         # send command to keyboard controller
         self.bot.kb.set_command(self.bot.cmd_move_x + ' ' + \
                                 self.bot.cmd_move_y + ' ' + \

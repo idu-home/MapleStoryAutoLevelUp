@@ -536,8 +536,12 @@ class MainWindow(QMainWindow):
         button_layout.addWidget(self.button_record)
         button_layout.addLayout(layout_bot_mode)
 
+        self.debug_mode_checkbox = QCheckBox("Enable Debug Mode")
+        self.debug_mode_checkbox.setToolTip("Enable debug mode - bot will analyze but not send keyboard commands")
+
         layout.addLayout(button_layout)
         layout.addLayout(load_config_layout)
+        layout.addWidget(self.debug_mode_checkbox)
 
         gbox.setLayout(layout)
         return gbox
@@ -884,6 +888,7 @@ class MainWindow(QMainWindow):
         '''
         # Bot control gbox
         self.cfg["bot"]["mode"] = self.bot_mode.currentText()
+        self.cfg["bot"]["debug_mode"] = self.debug_mode_checkbox.isChecked()
         # Attack setting gbox
         if self.attack_mode.currentText() == "Basic":
             self.cfg["bot"]["attack"] = "directional"
