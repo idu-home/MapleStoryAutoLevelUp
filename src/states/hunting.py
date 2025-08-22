@@ -17,10 +17,6 @@ class HuntingState(State):
             self.bot.img_frame_gray, self.bot.img_frame_debug):
             # When "Rune enable" message appears on screen
             self.bot.screenshot_img_frame()
-            
-            # Start rune detection alert
-            if self.bot.alert:
-                self.bot.alert.start_rune_alert()
 
             self.bot.profiler.mark("Hunting - Rune Detection Found")
             return "finding_rune"

@@ -9,19 +9,13 @@ class FindingRuneState(State):
         super().__init__(name, bot)
         self.bot = bot
         self.is_attack = True
-        self.rune_located_notified = False
-        self.minigame_notified = False
-        self.search_timeout_warning_sent = False
-        self.rune_warning_notified = False
 
     def on_enter(self):
         self.bot.rune_solver.reset()
-        self.enable_attack()
-        # Reset notification flags
-        self.rune_located_notified = False
-        self.minigame_notified = False
-        self.search_timeout_warning_sent = False
-        self.rune_warning_notified = False
+        self.disable_attack()
+
+        if self.bot.alert:
+            self.bot.alert.start_rune_alert()
 
     def on_exit(self):
         pass
@@ -36,39 +30,12 @@ class FindingRuneState(State):
         # Check whether in arrow box mini game
         if self.bot.rune_solver.is_in_rune_game(
             self.bot.img_frame, self.bot.img_frame_debug):
-            # Alert when entering rune mini-game (only once per session)
-            if self.bot.alert and not self.minigame_notified:
-                self.bot.alert.send_rune_activated_alert()
-                self.minigame_notified = True
             return "solving_rune"
 
         elif self.bot.rune_solver.loc_rune is not None:
-            # Alert when rune is found and bot is approaching (only once per session)
-            if self.bot.alert and not self.rune_located_notified:
-                self.bot.alert.send_rune_located_alert()
-                self.rune_located_notified = True
             return "near_rune"
 
         else:
-            # Check for rune search timeout (add 60 second timeout for finding rune)
-            RUNE_SEARCH_TIMEOUT = 60  # seconds
-            elapsed_time = time.time() - self.bot.fsm.t_last_transition
-            
-            # Send warning at 75% of timeout
-            if not self.search_timeout_warning_sent and elapsed_time > RUNE_SEARCH_TIMEOUT * 0.75:
-                if self.bot.alert:
-                    remaining_time = RUNE_SEARCH_TIMEOUT - elapsed_time
-                    self.bot.alert.send_rune_search_warning_alert(elapsed_time, remaining_time)
-                    self.search_timeout_warning_sent = True
-            
-            if elapsed_time > RUNE_SEARCH_TIMEOUT:
-                # Send timeout alert and return to hunting
-                if self.bot.alert:
-                    self.bot.alert.send_rune_search_timeout_alert(elapsed_time)
-                    # Also stop the persistent rune alert
-                    self.bot.alert.stop_rune_alert()
-                return "hunting"
-            
             return None
 
     def on_frame(self):
@@ -79,29 +46,11 @@ class FindingRuneState(State):
                 self.bot.loc_player
         )
 
-        # Start attacking if player's HP is reduced
-        if  time.time() - self.bot.health_monitor.t_last_hp_reduce < 1:
-            self.enable_attack()
-
-        # Stop attacking if "Please solve rune before hunting" shows on screen
-        if self.bot.rune_solver.is_rune_warning(
-            self.bot.img_frame_gray, self.bot.img_frame_debug):
-            self.disable_attack()
-            
-            # Alert about rune warning message (only once per session)
-            if self.bot.alert and not self.rune_warning_notified:
-                self.bot.alert.send_rune_warning_detected_alert()
-                self.rune_warning_notified = True
-
         # Get commend from route map
         self.bot.update_cmd_by_route()
 
         # Check if reach goal on route map
         self.bot.check_reach_goal()
-
-        # Get attack commend by detecting mobs near players
-        if self.is_attack:
-            self.bot.update_cmd_by_mob_detection()
 
         # If player stuck for too long, perform a random command
         if self.bot.is_player_stuck():

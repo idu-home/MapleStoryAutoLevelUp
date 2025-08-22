@@ -9,17 +9,11 @@ class NearRuneState(State):
     def __init__(self, name, bot):
         super().__init__(name, bot)
         self.bot = bot
-        self.timeout_warning_sent = False
-        self.interaction_attempts = 0
 
     def on_enter(self):
-        # Reset state variables
-        self.timeout_warning_sent = False
-        self.interaction_attempts = 0
-        
         # Alert when starting to interact with rune
         if self.bot.alert:
-            self.bot.alert.send_rune_interaction_start_alert()
+            self.bot.alert.send_rune_located_alert()
 
     def on_exit(self):
         self.bot.rune_solver.reset()
@@ -32,21 +26,10 @@ class NearRuneState(State):
 
         elif time.time() - self.bot.fsm.t_last_transition > \
             self.bot.cfg["rune_find"]["near_rune_duration"]:
-            # Check if statue timeout - send timeout alert
-            if self.bot.alert:
-                elapsed_time = time.time() - self.bot.fsm.t_last_transition
-                self.bot.alert.send_rune_interaction_timeout_alert(elapsed_time)
+            # Check if statue timeout
             return "finding_rune"
 
         else:
-            # Check for timeout warning (send at 70% of timeout duration)
-            warning_time = self.bot.cfg["rune_find"]["near_rune_duration"] * 0.7
-            if not self.timeout_warning_sent and \
-               time.time() - self.bot.fsm.t_last_transition > warning_time:
-                if self.bot.alert:
-                    remaining_time = self.bot.cfg["rune_find"]["near_rune_duration"] - (time.time() - self.bot.fsm.t_last_transition)
-                    self.bot.alert.send_rune_interaction_warning_alert(remaining_time)
-                    self.timeout_warning_sent = True
             return None
 
     def on_frame(self):
@@ -64,13 +47,7 @@ class NearRuneState(State):
         # Check if close enough to trigger the rune
         if  dx < self.bot.cfg["rune_find"]["rune_trigger_distance_x"] and \
             dy < self.bot.cfg["rune_find"]["rune_trigger_distance_y"]:
-            self.interaction_attempts += 1
             press_key("up", 0.02) # Attempt to trigger rune
-            
-            # Alert for excessive interaction attempts
-            if self.interaction_attempts > 0 and self.interaction_attempts % 20 == 0:
-                if self.bot.alert:
-                    self.bot.alert.send_rune_interaction_attempts_alert(self.interaction_attempts)
 
         # Get commend from route map
         self.bot.update_cmd_by_route()

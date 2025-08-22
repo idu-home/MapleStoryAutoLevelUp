@@ -8,18 +8,19 @@ class SolvingRuneState(State):
         self.bot.kb.release_all_key()
         self.bot.rune_solver.reset()
 
+        if self.bot.alert:
+            self.bot.alert.send_rune_interaction_start_alert()
+
     def on_exit(self):
-        pass
+        # Send rune solved notification
+        if self.bot.alert:
+            self.bot.alert.play_rune_solved_alert()
+            self.bot.alert.stop_rune_alert()
 
     def check_transitions(self):
         if not self.bot.rune_solver.is_in_rune_game(
             self.bot.img_frame, self.bot.img_frame_debug):
-            # Not in arrow minigame anymore - rune has been solved
-            # Send rune solved notification
-            if self.bot.alert:
-                self.bot.alert.play_rune_solved_alert()
-                # Also stop the rune alert if it's still active
-                self.bot.alert.stop_rune_alert()
+            # Not in arrow minigame anymore
             return "hunting"
         else:
             return None
