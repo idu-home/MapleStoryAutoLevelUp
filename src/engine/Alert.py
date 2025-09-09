@@ -39,6 +39,11 @@ class Alert:
         self.is_other_player_alert_active = False
         self.other_player_alert_thread = None
         self.other_player_first_detected_time = None
+        self.minimap_detection_failed = False
+        self.t_minimap_detection_failed = None
+        self.t_last_minimap_alert = None
+        self.minimap_alert_thread = None
+        self.minimap_alert_stop_event = None
         self.alert_lock = threading.Lock()
         
         # Initialize ntfy system
@@ -345,6 +350,117 @@ class Alert:
                 tags="rune,attempts,debug"
             )
     
+    def send_minimap_detection_failed_alert(self, duration):
+        '''Send minimap detection failure notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="🗺️ Minimap Detection Failed",
+                message=f"Unable to detect minimap for {duration:.1f} seconds. Bot may not function correctly.",
+                priority="high",
+                tags="minimap,detection,failure,warning"
+            )
+    
+    def send_minimap_detection_recovered_alert(self):
+        '''Send minimap detection recovery notification'''
+        if self.alert_enabled:
+            self._send_ntfy_notification(
+                title="✅ Minimap Detection Recovered",
+                message="Minimap detection is working again. Bot should function normally now.",
+                priority="default",
+                tags="minimap,detection,recovery,success"
+            )
+    
+    def update_minimap_detection_status(self, is_detected):
+        '''
+        Update minimap detection status and handle alerts
+        
+        Args:
+            is_detected (bool): True if minimap was successfully detected, False otherwise
+        '''
+        import time
+        
+        with self.alert_lock:
+            if is_detected:
+                # Minimap detection successful
+                if self.minimap_detection_failed:
+                    # Was in failure state, now recovered
+                    self._stop_minimap_alert_timer()
+                    
+                    if self.alert_enabled and self.t_last_minimap_alert is not None:
+                        # Only send recovery alert if we previously sent a failure alert
+                        self.send_minimap_detection_recovered_alert()
+                        logger.info("[Minimap Alert] Detection recovered - recovery alert sent")
+                    
+                    # Reset all tracking state
+                    self.minimap_detection_failed = False
+                    self.t_minimap_detection_failed = None
+                    self.t_last_minimap_alert = None
+                    logger.debug("[Minimap Alert] Reset minimap detection failure tracking")
+            else:
+                # Minimap detection failed
+                if not self.minimap_detection_failed:
+                    # First time detection failed - start timer
+                    self.minimap_detection_failed = True
+                    self.t_minimap_detection_failed = time.time()
+                    self.t_last_minimap_alert = None
+                    logger.debug("[Minimap Alert] Started tracking minimap detection failure")
+                    
+                    # Start alert timer
+                    if self.alert_enabled:
+                        self._start_minimap_alert_timer()
+                # If already in failure state, do nothing - timer is already running
+    
+    def _start_minimap_alert_timer(self):
+        '''Start the minimap alert timer thread'''
+        if self.minimap_alert_thread is not None:
+            return  # Timer already running
+        
+        import threading
+        self.minimap_alert_stop_event = threading.Event()
+        self.minimap_alert_thread = threading.Thread(target=self._minimap_alert_worker)
+        self.minimap_alert_thread.daemon = True
+        self.minimap_alert_thread.start()
+        logger.debug("[Minimap Alert] Started alert timer thread")
+    
+    def _stop_minimap_alert_timer(self):
+        '''Stop the minimap alert timer thread'''
+        if self.minimap_alert_thread is not None:
+            self.minimap_alert_stop_event.set()
+            self.minimap_alert_thread.join(timeout=1.0)
+            self.minimap_alert_thread = None
+            self.minimap_alert_stop_event = None
+            logger.debug("[Minimap Alert] Stopped alert timer thread")
+    
+    def _minimap_alert_worker(self):
+        '''Worker thread for minimap alert timing'''
+        import time
+        
+        timeout_threshold = self.cfg.get("minimap", {}).get("detection_failure_timeout", 10.0)
+        repeat_interval = self.cfg.get("minimap", {}).get("alert_repeat_interval", 10.0)
+        
+        # Wait for initial timeout
+        if self.minimap_alert_stop_event.wait(timeout_threshold):
+            return  # Stopped before timeout
+        
+        # Send initial alert
+        with self.alert_lock:
+            if self.minimap_detection_failed and self.t_minimap_detection_failed is not None:
+                failure_duration = time.time() - self.t_minimap_detection_failed
+                self.send_minimap_detection_failed_alert(failure_duration)
+                self.t_last_minimap_alert = time.time()
+                logger.warning(f"[Minimap Alert] Detection failed for {failure_duration:.1f}s - initial alert sent")
+        
+        # Send repeat alerts
+        while not self.minimap_alert_stop_event.wait(repeat_interval):
+            with self.alert_lock:
+                if self.minimap_detection_failed and self.t_minimap_detection_failed is not None:
+                    failure_duration = time.time() - self.t_minimap_detection_failed
+                    self.send_minimap_detection_failed_alert(failure_duration)
+                    self.t_last_minimap_alert = time.time()
+                    logger.warning(f"[Minimap Alert] Detection still failed for {failure_duration:.1f}s - repeat alert sent")
+                else:
+                    break  # No longer in failure state
+    
     def is_rune_alert_playing(self):
         '''Check if rune alert is currently active'''
         with self.alert_lock:
@@ -358,6 +474,7 @@ class Alert:
         '''Clean up resources'''
         self.stop_rune_alert()
         self.stop_other_player_alert()
+        self._stop_minimap_alert_timer()
         
 
 

@@ -280,6 +280,10 @@ minimap:
   other_player_color: [0, 0, 255] # 🔴 BGR value of the red other player dot on the minimap
   debug_window_upscale: 4         # 🔍 Zoom factor for the route debug image (for visualization only)
   offset: [0, 0]                  # 📐 Don't set this unless playing on global server
+  # Alert settings for minimap detection failures
+  detection_failure_timeout: 10.0 # ⏰ Seconds of continuous failure before sending alert
+  enable_detection_alerts: True   # 🔔 Enable alerts for minimap detection issues
+  alert_repeat_interval: 10.0     # 🔔 Seconds between repeat alerts (0 = no repeat)
 
 patrol:
   # 🚶‍♂️ Patrol Mode

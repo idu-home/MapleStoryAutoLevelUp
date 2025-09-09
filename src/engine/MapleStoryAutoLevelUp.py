@@ -108,6 +108,8 @@ class MapleStoryAutoBot:
         self.t_last_attack = time.time() # Last attack timer for cooldown
         self.t_last_minimap_update = time.time()
         self.t_to_change_channel = time.time()
+        # Minimap detection state tracking
+        self.minimap_detection_state = None  # Track current minimap detection state
         # Images
         self.img_map = None
         self.img_routes = []
@@ -1918,6 +1920,13 @@ class MapleStoryAutoBot:
         ###################
         # Get minimap coordinate and size on game window
         minimap_result = get_minimap_loc_size(self.img_frame)
+        current_detection_state = minimap_result is not None
+        if self.alert and self.cfg["minimap"]["enable_detection_alerts"]:
+            if self.minimap_detection_state != current_detection_state:
+                self.alert.update_minimap_detection_status(current_detection_state)
+                self.minimap_detection_state = current_detection_state
+                logger.debug(f"[Minimap Alert] Detection state changed to: {current_detection_state}")
+
         if minimap_result is None:
             if time.time() - self.t_last_minimap_update > 30:
                 # Unable to get minimap for 30 seconds -> assume it's login screen

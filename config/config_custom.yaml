@@ -1,8 +1,9 @@
 bot:
-  map: dragon_territory
+  map: 101_2f_east
 directional_attack:
-  range_x: 120
-  range_y: 80
+  range_x: 150
+  range_y: 60
+  sustained_attack: false
 health_monitor:
   add_hp_percent: 0
   add_mp_percent: 0
