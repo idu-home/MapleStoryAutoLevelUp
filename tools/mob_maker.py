@@ -11,7 +11,7 @@ BASE_URL = "https://maplestory.io" # Placeholder URL, replace with actual API ba
 
 # Default region and version if not provided
 DEFAULT_REGION = "GMS"
-DEFAULT_VERSION = "65"
+DEFAULT_VERSION = "148"
 
 def get_all_mobs(region=None, version=None):
     """
@@ -30,7 +30,7 @@ def get_all_mobs(region=None, version=None):
         version = DEFAULT_VERSION
 
     url = f"{BASE_URL}/api/{region}/{version}/mob"
-    print(f"Fetching mobs from: {url}\nYou can find monster names at https://maplestory.wiki/GMS/65/mob")
+    print(f"Fetching mobs from: {url}\nYou can find monster names at https://maplestory.wiki/GMS/148/mob")
 
     try:
         response = requests.get(url)

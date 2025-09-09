@@ -2000,7 +2000,7 @@ class MapleStoryAutoBot:
                                 self.cfg['minimap']['other_player_color'])
         
         # Handle other player alert notifications
-        self.alert.update_other_player_status(len(loc_other_players))
+        # self.alert.update_other_player_status(len(loc_other_players))
 
         # Debug
         # if self.is_first_frame:

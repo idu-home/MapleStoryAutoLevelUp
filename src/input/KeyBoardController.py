@@ -277,7 +277,7 @@ class KeyBoardController():
             elif self.cmd_action == "teleport":
                 press_key(self.cfg["key"]["teleport"])
             elif self.cmd_action == "attack":
-                press_key(self.attack_key)
+                press_key(self.attack_key, duration=0.2)
                 self.t_last_skill = time.time()
             elif self.cmd_action == "attack_start":
                 # Start sustained attack - press and hold attack key

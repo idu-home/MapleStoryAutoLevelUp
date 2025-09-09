@@ -1,5 +1,5 @@
 bot:
-  map: 101_2f_east
+  map: 101_mingren_north
 directional_attack:
   range_x: 150
   range_y: 60
