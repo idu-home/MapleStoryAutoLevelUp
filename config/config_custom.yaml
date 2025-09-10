@@ -1,13 +1,19 @@
 bot:
   map: 101_mingren_north
+buff_skill:
+  cooldown:
+  - 550
+  keys:
+  - del
 directional_attack:
-  range_x: 150
+  range_x: 200
   range_y: 60
   sustained_attack: false
 health_monitor:
-  add_hp_percent: 0
+  add_hp_percent: 70
   add_mp_percent: 0
 key:
+  add_hp: pgup
   directional_attack: f
   return_home: "\u2196"
 nametag:
