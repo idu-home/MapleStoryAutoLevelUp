@@ -17,7 +17,9 @@
       "Bash(find:*)",
       "Bash(chmod:*)",
       "Bash(grep:*)",
-      "Bash(mv:*)"
+      "Bash(mv:*)",
+      "mcp__ide__executeCode",
+      "Bash(source:*)"
     ],
     "deny": [],
     "defaultMode": "acceptEdits"
