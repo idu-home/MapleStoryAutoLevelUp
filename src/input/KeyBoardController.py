@@ -252,8 +252,9 @@ class KeyBoardController():
             ### Up-Down Command ###
             #######################
             if self.cmd_up_down == "up":
-                key_up("down")
-                key_down("up")
+                press_key("up")
+                # key_up("down")
+                # key_down("up")
             elif self.cmd_up_down == "down":
                 key_up("up")
                 key_down("down")

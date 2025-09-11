@@ -914,15 +914,16 @@ class MainWindow(QMainWindow):
         # Auto Add HP
         if self.checkbox_auto_add_hp.isChecked():
             self.cfg["health_monitor"]["add_hp_percent"] = int(self.add_hp_percent.text())
-            self.cfg["key"]["add_hp"] = self.add_hp_key.get_key()
         else:
             self.cfg["health_monitor"]["add_hp_percent"] = 0
+        self.cfg["key"]["add_hp"] = self.add_hp_key.get_key()
+        
         # Auto Add MP
         if self.checkbox_auto_add_mp.isChecked():
             self.cfg["health_monitor"]["add_mp_percent"] = int(self.add_mp_percent.text())
-            self.cfg["key"]["add_mp"] = self.add_mp_key.get_key()
         else:
             self.cfg["health_monitor"]["add_mp_percent"] = 0
+        self.cfg["key"]["add_mp"] = self.add_mp_key.get_key()
         # Buff skills
         if not self.checkbox_enable_buff.isChecked():
             self.cfg["buff_skill"]["keys"] = []
