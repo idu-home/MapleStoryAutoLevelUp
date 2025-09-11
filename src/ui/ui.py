@@ -735,6 +735,7 @@ class MainWindow(QMainWindow):
         elif self.cfg["bot"]["mode"] == "patrol":
             index = 2
         self.bot_mode.setCurrentIndex(index)
+        self.debug_mode_checkbox.setChecked(self.cfg["bot"]["debug_mode"])
 
         # Map Selection
         for i in range(self.list_widget_maps.count()):
