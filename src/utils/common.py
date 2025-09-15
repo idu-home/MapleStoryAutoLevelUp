@@ -490,7 +490,7 @@ def get_all_other_player_locations_on_minimap(img_minimap, red_bgr=(0, 0, 255)):
     '''
     red_bgr = tuple(map(int, red_bgr))
     # 智能選擇容錯範圍：從較小開始，如果檢測不到就增加
-    tolerances = [10, 20]  # 嘗試不同的容錯範圍
+    tolerances = [10]  # 嘗試不同的容錯範圍
     
     for tolerance in tolerances:
         lower_bgr = tuple(max(0, c - tolerance) for c in red_bgr)
