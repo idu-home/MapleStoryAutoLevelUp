@@ -27,21 +27,13 @@ class RuneSolver:
         self.img_runes = []
         self.img_arrows = {
             "left":
-                [load_image("rune/arrow_left_1.png"),
-                 load_image("rune/arrow_left_2.png"),
-                 load_image("rune/arrow_left_3.png"),],
+                [load_image("rune/arrow_left_1.png")],
             "right":
-                [load_image("rune/arrow_right_1.png"),
-                 load_image("rune/arrow_right_2.png"),
-                 load_image("rune/arrow_right_3.png"),],
+                [load_image("rune/arrow_right_1.png")],
             "up":
-                [load_image("rune/arrow_up_1.png"),
-                 load_image("rune/arrow_up_2.png"),
-                 load_image("rune/arrow_up_3.png")],
+                [load_image("rune/arrow_up_1.png")],
             "down":
-                [load_image("rune/arrow_down_1.png"),
-                 load_image("rune/arrow_down_2.png"),
-                 load_image("rune/arrow_down_3.png"),],
+                [load_image("rune/arrow_down_1.png")],
         }
         # Load rune images from rune/
         lang = cfg["system"]["language"]
@@ -49,9 +41,7 @@ class RuneSolver:
                                            cv2.IMREAD_GRAYSCALE)
         self.img_rune_warning_mask = get_mask(load_image(f"rune/rune_warning_{lang}.png"), (0, 255, 0))
 
-        self.img_runes = [load_image( "rune/rune_1.png"),
-                          load_image(f"rune/rune_2_{lang}.png"),
-                          load_image( "rune/rune_3.png"),]
+        self.img_runes = [load_image( "rune/rune_1.png")]
         self.img_rune_enable = load_image(f"rune/rune_enable_{lang}.png",
                                           cv2.IMREAD_GRAYSCALE)
         # Coordinate
@@ -59,6 +49,32 @@ class RuneSolver:
 
     def reset(self):
         self.loc_rune = None
+
+    def arrow_white_binarized(self, img, sat_thresh=30, val_thresh=80):
+        """
+        Convert a BGR image to a binary mask for white arrow detection using HSV thresholding.
+
+        Args:
+            img (np.ndarray): BGR image
+            sat_thresh (int): Max saturation allowed for "white" (0–100)
+            val_thresh (int): Min brightness required for "white" (0–100)
+
+        Returns:
+            np.ndarray: Binary mask (0=background, 255=arrow)
+        """
+        # Convert BGR → HSV
+        img_hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+
+        # HSV in OpenCV is (H: 0–179, S: 0–255, V: 0–255)
+        # Hue 全部允許，所以 0–179
+        # S ≤ sat_thresh% * 255
+        # V ≥ val_thresh% * 255
+        lower = np.array([0, 0, int(val_thresh * 2.55)], dtype=np.uint8)
+        upper = np.array([179, int(sat_thresh * 2.55), 255], dtype=np.uint8)
+
+        mask = cv2.inRange(img_hsv, lower, upper)
+
+        return mask
 
     def solve_rune(self, img, img_debug):
         '''
@@ -80,9 +96,8 @@ class RuneSolver:
             None
         '''
         # Only the highlighted arrow will show on mask
-        img_bin = self.arrow_hsv_binarized(img,
-                                           self.cfg['rune_solver']['arrow_highlight_low_hsv'],
-                                           self.cfg['rune_solver']['arrow_highlight_high_hsv'])
+        img_bin = self.arrow_white_binarized(img)
+
         # Debug img_bin
         # cv2.imshow("img_bin", img_bin)
         # cv2.waitKey(1)
@@ -360,9 +375,8 @@ class RuneSolver:
         Returns:
             bool: True if the rune game is detected on screen, False otherwise.
         '''
-        img_bin = self.arrow_hsv_binarized(img,
-                                           self.cfg['rune_solver']['arrow_low_hsv'],
-                                           self.cfg['rune_solver']['arrow_high_hsv'])
+        img_bin = self.arrow_white_binarized(img)
+
         # Debug img_bin
         # cv2.imshow("img_bin", img_bin)
         # cv2.waitKey(1)

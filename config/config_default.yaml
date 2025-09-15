@@ -212,8 +212,8 @@ rune_warning_cn:
   # ⚠️ Rune Warning Detection(Chinese)
   # Detects the "Please remove the rune" message on screen.
   # When this warning appears, the bot will pause combat and start searching for the rune instead.
-  top_left: [513, 137]        # 🟦 Top-left corner of the rune warning message (img_frame coord)
-  bottom_right: [768, 177]    # 🟥 Bottom-right corner of the rune warning (img_frame coord)
+  top_left: [530, 222]        # 🟦 Top-left corner of the rune warning message (img_frame coord)
+  bottom_right: [828, 247]    # 🟥 Bottom-right corner of the rune warning (img_frame coord)
   diff_thres: 0.15            # 📏 Matching threshold [0.0 ~ 1.0], higher = stricter match
 
 rune_warning_eng:
@@ -228,8 +228,8 @@ rune_enable_msg_cn:
   # ⚠️ Rune Enable Message(Chinese)
   # Detects the "Runes has been create" message on screen
   # When it appears, the bot will start detecting runes
-  top_left: [559, 57]     # 📐 top left coordinate of rune enable msg (img_frame coord)
-  bottom_right: [733, 87] # 📐 right bottom coordinate of rune enable msg (img_frame coord)
+  top_left: [530, 222]     # 📐 top left coordinate of rune enable msg (img_frame coord)
+  bottom_right: [828, 247] # 📐 right bottom coordinate of rune enable msg (img_frame coord)
   diff_thres: 0.15         # 📏 Match threshold [0.0 ~ 1.0], higher = stricter match
 
 rune_enable_msg_eng:
@@ -263,7 +263,7 @@ rune_solver:
   # then press the correct direction key to solve the mini-game.
   arrow_box_size: 80           # 📐 Arrow icon size in pixels (e.g., 75x75 box)
   arrow_box_interval: 170      # ↔️ Distance between arrows (horizontal spacing in pixels)
-  arrow_box_coord: [355, 296]  # 🎯 Top-left coordinate of the first (leftmost) arrow (img_frame coord)
+  arrow_box_coord: [355, 350]  # 🎯 Top-left coordinate of the first (leftmost) arrow (img_frame coord)
   arrow_box_diff_thres: 0.2    # 📏 Match threshold [0.0 ~ 1.0]
                                #     ↪ If the match score of the first arrow is lower than this,
                                #     the solver assumes the rune mini-game has started
